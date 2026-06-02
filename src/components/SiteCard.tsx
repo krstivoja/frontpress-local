@@ -2,6 +2,7 @@ import { useState } from "react";
 import { save, message } from "@tauri-apps/plugin-dialog";
 import { api, SiteView } from "../api";
 import { DuplicateModal } from "./DuplicateModal";
+import { RestoreModal } from "./RestoreModal";
 
 export function SiteCard({
   site,
@@ -27,6 +28,7 @@ export function SiteCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   const backup = async () => {
     setMenuOpen(false);
@@ -98,6 +100,14 @@ export function SiteCard({
               <button
                 onClick={() => {
                   setMenuOpen(false);
+                  setRestoring(true);
+                }}
+              >
+                Restore from backup…
+              </button>
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
                   onReveal();
                 }}
               >
@@ -154,6 +164,17 @@ export function SiteCard({
           onClose={() => setDuplicating(false)}
           onDone={() => {
             setDuplicating(false);
+            onChanged();
+          }}
+        />
+      )}
+
+      {restoring && (
+        <RestoreModal
+          site={site}
+          onClose={() => setRestoring(false)}
+          onDone={() => {
+            setRestoring(false);
             onChanged();
           }}
         />

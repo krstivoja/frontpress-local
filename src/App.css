@@ -685,6 +685,19 @@ body {
   line-height: 1;
   color: var(--text-muted);
 }
+.confirm-restore {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.confirm-restore code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+}
 
 /* ── Progress ────────────────────────────────────────────── */
 .progress-pane {

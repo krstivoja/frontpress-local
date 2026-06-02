@@ -55,8 +55,8 @@ export const api = {
     invoke<SiteView>("duplicate_site", { id, name }),
   backupSite: (id: string, dest: string) =>
     invoke<void>("backup_site", { id, dest }),
-  restoreSite: (zipPath: string) =>
-    invoke<SiteView>("restore_site", { zipPath }),
+  restoreIntoSite: (id: string, zipPath: string) =>
+    invoke<SiteView>("restore_into_site", { id, zipPath }),
   openPreview: (id: string) => invoke<void>("open_preview", { id }),
   autoLogin: (id: string) => invoke<void>("auto_login", { id }),
   revealInFinder: (id: string) => invoke<void>("reveal_in_finder", { id }),

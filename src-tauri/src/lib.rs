@@ -101,7 +101,7 @@ pub fn run() {
             commands::stop_all_sites,
             commands::duplicate_site,
             commands::backup_site,
-            commands::restore_site,
+            commands::restore_into_site,
             commands::delete_site,
             commands::open_preview,
             commands::auto_login,

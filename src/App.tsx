@@ -5,6 +5,7 @@ import { SiteList } from "./components/SiteList";
 import { CreateSiteModal } from "./components/CreateSiteModal";
 import { PhpSettingsModal } from "./components/PhpSettingsModal";
 import { UpdateBanner } from "./components/UpdateBanner";
+import { RestoreModal } from "./components/RestoreModal";
 import { useUpdater } from "./lib/useUpdater";
 import "./App.css";
 
@@ -13,6 +14,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [phpOpen, setPhpOpen] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [version, setVersion] = useState("");
   const updater = useUpdater();
 
@@ -72,6 +74,9 @@ function App() {
           >
             Stop all
           </button>
+          <button className="btn ghost" onClick={() => setRestoring(true)}>
+            Restore
+          </button>
           <button className="btn ghost" onClick={() => setPhpOpen(true)}>
             PHP settings
           </button>
@@ -107,6 +112,16 @@ function App() {
         <PhpSettingsModal
           onClose={() => {
             setPhpOpen(false);
+            refresh();
+          }}
+        />
+      )}
+
+      {restoring && (
+        <RestoreModal
+          onClose={() => setRestoring(false)}
+          onDone={() => {
+            setRestoring(false);
             refresh();
           }}
         />

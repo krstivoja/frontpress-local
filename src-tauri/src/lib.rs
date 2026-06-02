@@ -5,6 +5,7 @@ mod net;
 mod paths;
 mod php;
 mod server;
+mod siteops;
 mod store;
 mod util;
 
@@ -18,6 +19,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::load())
         .menu(|handle| {
             // Native macOS menu. We replace the default so we can add
@@ -97,6 +99,9 @@ pub fn run() {
             commands::start_site,
             commands::stop_site,
             commands::stop_all_sites,
+            commands::duplicate_site,
+            commands::backup_site,
+            commands::restore_site,
             commands::delete_site,
             commands::open_preview,
             commands::auto_login,

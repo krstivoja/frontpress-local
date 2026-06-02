@@ -42,6 +42,7 @@ export function SiteList({
           onDelete={(deleteFiles) =>
             run(site.id, () => api.deleteSite(site.id, deleteFiles))
           }
+          onChanged={onChanged}
           />
         ))}
       </div>

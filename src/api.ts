@@ -51,6 +51,12 @@ export const api = {
   stopAllSites: () => invoke<void>("stop_all_sites"),
   deleteSite: (id: string, deleteFiles: boolean) =>
     invoke<void>("delete_site", { id, deleteFiles }),
+  duplicateSite: (id: string, name: string) =>
+    invoke<SiteView>("duplicate_site", { id, name }),
+  backupSite: (id: string, dest: string) =>
+    invoke<void>("backup_site", { id, dest }),
+  restoreSite: (zipPath: string) =>
+    invoke<SiteView>("restore_site", { zipPath }),
   openPreview: (id: string) => invoke<void>("open_preview", { id }),
   autoLogin: (id: string) => invoke<void>("auto_login", { id }),
   revealInFinder: (id: string) => invoke<void>("reveal_in_finder", { id }),

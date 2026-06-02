@@ -3,7 +3,7 @@
 
 use crate::server::ServerManager;
 use crate::store::{now_secs, Settings, Site, Store};
-use crate::{frontpress, keychain, paths, php, util};
+use crate::{frontpress, keychain, paths, php, siteops, util};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -329,7 +329,7 @@ pub async fn create_site(
         admin_user,
         created_at: now_secs(),
     };
-    let view = {
+    {
         let mut store = state.store.lock().map_err(err)?;
         // If global PHP was unset, adopt what we just resolved.
         if store.settings.global_php_version.is_empty() {
@@ -337,10 +337,15 @@ pub async fn create_site(
         }
         store.sites.push(site.clone());
         store.save().map_err(err)?;
-        view_of(&site, &state.servers)
-    };
+    }
+
+    // Bring the new site online right away (best-effort — a failed start
+    // still leaves the site created; the user can start it from the toggle).
+    emit_progress(&app, "config", "Starting site…", 0, None);
+    let _ = start_internal(&state, &site);
+
     emit_progress(&app, "done", "Site ready", 100, Some(100));
-    Ok(view)
+    Ok(view_of(&site, &state.servers))
 }
 
 #[tauri::command]
@@ -366,6 +371,234 @@ pub fn stop_site(state: State<'_, AppState>, id: String) -> CmdResult<SiteView> 
 pub fn stop_all_sites(state: State<'_, AppState>) -> CmdResult<()> {
     state.servers.stop_all();
     Ok(())
+}
+
+/// Duplicate a site into a new folder with its own port + fresh credentials,
+/// then bring it online.
+#[tauri::command]
+pub async fn duplicate_site(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    name: String,
+) -> CmdResult<SiteView> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Please enter a name for the copy.".into());
+    }
+    let slug = util::slugify(&name);
+    let src = {
+        let store = state.store.lock().map_err(err)?;
+        store.site(&id).cloned().ok_or("Unknown site")?
+    };
+    let port = {
+        let store = state.store.lock().map_err(err)?;
+        if !store.slug_available(&slug) {
+            return Err(format!("A site named “{slug}” already exists."));
+        }
+        store.next_free_port()
+    };
+
+    let src_dir = PathBuf::from(&src.path);
+    let dst_dir = paths::default_sites_parent().map_err(err)?.join(&slug);
+    if dst_dir.exists() {
+        return Err(format!("Directory already exists: {}", dst_dir.display()));
+    }
+
+    emit_progress(&app, "config", "Copying site files…", 0, None);
+    let s2 = src_dir.clone();
+    let d2 = dst_dir.clone();
+    tokio::task::spawn_blocking(move || siteops::copy_dir_all(&s2, &d2))
+        .await
+        .map_err(err)?
+        .map_err(|e| {
+            let _ = std::fs::remove_dir_all(&dst_dir);
+            err(e)
+        })?;
+
+    // Fresh credentials + login bridge for the copy.
+    let admin_user = "admin".to_string();
+    let password = util::random_password();
+    let hash = frontpress::bcrypt_hash(&password).map_err(err)?;
+    frontpress::write_config(&dst_dir, &admin_user, &hash).map_err(err)?;
+    frontpress::write_login_helper(&dst_dir).map_err(err)?;
+
+    let new_id = util::random_id();
+    keychain::set_password(&new_id, &password).map_err(err)?;
+
+    // The source's PHP should already be installed; make sure.
+    php::ensure_installed(&src.php_version, |_, _| {})
+        .await
+        .map_err(err)?;
+
+    let site = Site {
+        id: new_id,
+        name,
+        slug,
+        path: dst_dir.to_string_lossy().to_string(),
+        port,
+        php_version: src.php_version.clone(),
+        frontpress_version: src.frontpress_version.clone(),
+        admin_user,
+        created_at: now_secs(),
+    };
+    {
+        let mut store = state.store.lock().map_err(err)?;
+        store.sites.push(site.clone());
+        store.save().map_err(err)?;
+    }
+    emit_progress(&app, "config", "Starting site…", 0, None);
+    let _ = start_internal(&state, &site);
+    emit_progress(&app, "done", "Site ready", 100, Some(100));
+    Ok(view_of(&site, &state.servers))
+}
+
+/// Zip the entire site directory to `dest` (a path picked by the save dialog).
+#[tauri::command]
+pub async fn backup_site(
+    state: State<'_, AppState>,
+    id: String,
+    dest: String,
+) -> CmdResult<()> {
+    let site = {
+        let store = state.store.lock().map_err(err)?;
+        store.site(&id).cloned().ok_or("Unknown site")?
+    };
+    let src_dir = PathBuf::from(&site.path);
+    let meta = siteops::BackupMeta {
+        name: site.name.clone(),
+        php_version: site.php_version.clone(),
+        frontpress_version: site.frontpress_version.clone(),
+        admin_user: site.admin_user.clone(),
+    };
+    let dest_path = PathBuf::from(dest);
+    tokio::task::spawn_blocking(move || {
+        // Drop a metadata sidecar in, zip, then remove it so restore can
+        // recover the name / versions.
+        siteops::write_meta(&src_dir, &meta)?;
+        let res = siteops::zip_dir(&src_dir, &dest_path);
+        let _ = std::fs::remove_file(src_dir.join(siteops::META_FILE));
+        res
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)?;
+    Ok(())
+}
+
+/// Restore a site from a backup zip: unzip into a new folder, recover metadata,
+/// register it, and bring it online.
+#[tauri::command]
+pub async fn restore_site(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    zip_path: String,
+) -> CmdResult<SiteView> {
+    let zp = PathBuf::from(&zip_path);
+    if zp.extension().and_then(|e| e.to_str()) != Some("zip") {
+        return Err("Please drop a .zip backup file.".into());
+    }
+
+    // Provisional slug from the file name; finalized once we read metadata.
+    let stem = zp
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("restored")
+        .replace("-backup", "");
+
+    let (global_php, _min_php) = {
+        let store = state.store.lock().map_err(err)?;
+        (
+            store.settings.global_php_version.clone(),
+            store.settings.min_php.clone(),
+        )
+    };
+
+    // Extract to a temp dir first, then move into a unique slug.
+    let parent = paths::default_sites_parent().map_err(err)?;
+    let tmp_dir = parent.join(format!(".restore-{}", util::random_id()));
+    let zp2 = zp.clone();
+    let tmp2 = tmp_dir.clone();
+    tokio::task::spawn_blocking(move || siteops::unzip(&zp2, &tmp2))
+        .await
+        .map_err(err)?
+        .map_err(|e| {
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            err(e)
+        })?;
+
+    if let Err(e) = siteops::looks_like_site(&tmp_dir) {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        return Err(err(e));
+    }
+
+    let meta = siteops::take_meta(&tmp_dir).unwrap_or_default();
+    let base_name = if !meta.name.is_empty() {
+        meta.name.clone()
+    } else {
+        stem.clone()
+    };
+
+    // Finalize a unique slug + destination, then move temp → destination.
+    let (slug, dst_dir, port) = {
+        let store = state.store.lock().map_err(err)?;
+        let base = util::slugify(&base_name);
+        let mut slug = base.clone();
+        let mut n = 2;
+        while !store.slug_available(&slug) || parent.join(&slug).exists() {
+            slug = format!("{base}-{n}");
+            n += 1;
+        }
+        (slug.clone(), parent.join(&slug), store.next_free_port())
+    };
+    std::fs::rename(&tmp_dir, &dst_dir).map_err(|e| {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        err(e)
+    })?;
+
+    // Make sure the login bridge + a usable PHP runtime are present.
+    frontpress::write_login_helper(&dst_dir).map_err(err)?;
+    let admin_user = siteops::read_admin_user(&dst_dir);
+
+    let php_version = if !meta.php_version.is_empty() {
+        meta.php_version.clone()
+    } else if !global_php.is_empty() {
+        global_php
+    } else {
+        let remote = php::remote_versions().await.map_err(err)?;
+        php::latest_patch(&remote, crate::store::PREFERRED_PHP_MINOR)
+            .ok_or("No PHP build available")?
+    };
+    php::ensure_installed(&php_version, |_, _| {})
+        .await
+        .map_err(err)?;
+
+    let fp_version = if meta.frontpress_version.is_empty() {
+        "?".to_string()
+    } else {
+        meta.frontpress_version.clone()
+    };
+
+    let site = Site {
+        id: util::random_id(),
+        name: base_name,
+        slug,
+        path: dst_dir.to_string_lossy().to_string(),
+        port,
+        php_version,
+        frontpress_version: fp_version,
+        admin_user,
+        created_at: now_secs(),
+    };
+    {
+        let mut store = state.store.lock().map_err(err)?;
+        store.sites.push(site.clone());
+        store.save().map_err(err)?;
+    }
+    emit_progress(&app, "config", "Starting site…", 0, None);
+    let _ = start_internal(&state, &site);
+    emit_progress(&app, "done", "Site restored", 100, Some(100));
+    Ok(view_of(&site, &state.servers))
 }
 
 fn start_internal(state: &State<'_, AppState>, site: &Site) -> CmdResult<()> {

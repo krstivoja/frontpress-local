@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { SiteView } from "../api";
+import { save, message } from "@tauri-apps/plugin-dialog";
+import { api, SiteView } from "../api";
+import { DuplicateModal } from "./DuplicateModal";
 
 export function SiteCard({
   site,
@@ -10,6 +12,7 @@ export function SiteCard({
   onStop,
   onReveal,
   onDelete,
+  onChanged,
 }: {
   site: SiteView;
   busy: boolean;
@@ -19,9 +22,26 @@ export function SiteCard({
   onStop: () => void;
   onReveal: () => void;
   onDelete: (deleteFiles: boolean) => void;
+  onChanged: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+
+  const backup = async () => {
+    setMenuOpen(false);
+    try {
+      const dest = await save({
+        defaultPath: `${site.slug}-backup.zip`,
+        filters: [{ name: "Backup zip", extensions: ["zip"] }],
+      });
+      if (!dest) return;
+      await api.backupSite(site.id, dest);
+      await message("Backup saved.", { title: "FrontPress Local", kind: "info" });
+    } catch (e) {
+      await message(String(e), { title: "Backup failed", kind: "error" });
+    }
+  };
 
   return (
     <div className="site-card">
@@ -66,6 +86,15 @@ export function SiteCard({
           </button>
           {menuOpen && (
             <div className="menu" onMouseLeave={() => setMenuOpen(false)}>
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  setDuplicating(true);
+                }}
+              >
+                Duplicate…
+              </button>
+              <button onClick={backup}>Back up…</button>
               <button
                 onClick={() => {
                   setMenuOpen(false);
@@ -117,6 +146,17 @@ export function SiteCard({
             </button>
           </div>
         </div>
+      )}
+
+      {duplicating && (
+        <DuplicateModal
+          site={site}
+          onClose={() => setDuplicating(false)}
+          onDone={() => {
+            setDuplicating(false);
+            onChanged();
+          }}
+        />
       )}
     </div>
   );

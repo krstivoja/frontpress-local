@@ -1,6 +1,6 @@
 [package]
 name = "frontpress-local"
-version = "0.1.0"
+version = "0.2.0"
 description = "FrontPress Local — run FrontPress Studio sites on your Mac"
 authors = ["Marko Krstić"]
 edition = "2021"

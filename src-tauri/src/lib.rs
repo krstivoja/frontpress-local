@@ -15,7 +15,19 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState::load())
+        .setup(|app| {
+            // Stamp the running version to disk so a self-update can be
+            // verified out-of-band (the file flips to the new version after
+            // the updater relaunches the app).
+            if let Ok(dir) = crate::paths::app_data_dir() {
+                let v = app.package_info().version.to_string();
+                let _ = std::fs::write(dir.join("last-run-version.txt"), v);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::app_status,
             commands::available_php,
@@ -28,8 +40,8 @@ pub fn run() {
             commands::open_preview,
             commands::auto_login,
             commands::reveal_in_finder,
-            commands::get_credentials,
             commands::get_settings,
+            commands::selftest_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building FrontPress Local")

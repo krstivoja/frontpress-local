@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, Credentials, SiteView } from "../api";
+import { SiteView } from "../api";
 
 export function SiteCard({
   site,
@@ -22,16 +22,6 @@ export function SiteCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [creds, setCreds] = useState<Credentials | null>(null);
-
-  const showCreds = async () => {
-    setMenuOpen(false);
-    try {
-      setCreds(await api.getCredentials(site.id));
-    } catch (e) {
-      alert(String(e));
-    }
-  };
 
   return (
     <div className={`site-card ${site.running ? "is-running" : ""}`}>
@@ -79,7 +69,6 @@ export function SiteCard({
           </button>
           {menuOpen && (
             <div className="menu" onMouseLeave={() => setMenuOpen(false)}>
-              <button onClick={showCreds}>Show credentials</button>
               <button
                 onClick={() => {
                   setMenuOpen(false);
@@ -101,20 +90,6 @@ export function SiteCard({
           )}
         </div>
       </div>
-
-      {creds && (
-        <div className="creds">
-          <div>
-            <span className="muted">User</span> <code>{creds.user}</code>
-          </div>
-          <div>
-            <span className="muted">Password</span> <code>{creds.password}</code>
-          </div>
-          <button className="btn tiny" onClick={() => setCreds(null)}>
-            Hide
-          </button>
-        </div>
-      )}
 
       {confirmDelete && (
         <div className="confirm">

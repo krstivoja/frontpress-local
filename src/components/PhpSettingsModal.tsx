@@ -112,12 +112,6 @@ export function PhpSettingsModal({ onClose }: { onClose: () => void }) {
           );
         })}
       </div>
-
-      <div className="modal-actions">
-        <button className="btn primary" onClick={onClose}>
-          Done
-        </button>
-      </div>
     </Modal>
   );
 }

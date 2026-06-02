@@ -19,7 +19,9 @@ pub fn set_password(site_id: &str, password: &str) -> Result<()> {
         .context("write keychain password")
 }
 
-/// Fetch the stored admin password, if any.
+/// Fetch the stored admin password, if any. Retained for future use
+/// (the UI logs in via the token bridge, so it isn't read today).
+#[allow(dead_code)]
 pub fn get_password(site_id: &str) -> Result<Option<String>> {
     match entry(site_id)?.get_password() {
         Ok(p) => Ok(Some(p)),

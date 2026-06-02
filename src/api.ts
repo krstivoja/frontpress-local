@@ -34,12 +34,6 @@ export interface PhpCatalog {
   options: PhpOption[];
 }
 
-export interface Credentials {
-  user: string;
-  password: string;
-  adminUrl: string;
-}
-
 export interface CreateSiteArgs {
   name: string;
   phpMode: "global" | "custom";
@@ -59,7 +53,7 @@ export const api = {
   openPreview: (id: string) => invoke<void>("open_preview", { id }),
   autoLogin: (id: string) => invoke<void>("auto_login", { id }),
   revealInFinder: (id: string) => invoke<void>("reveal_in_finder", { id }),
-  getCredentials: (id: string) => invoke<Credentials>("get_credentials", { id }),
+  selftestUpdate: () => invoke<boolean>("selftest_update"),
 };
 
 export interface SetupProgress {

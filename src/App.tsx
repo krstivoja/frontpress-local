@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { api, AppStatus } from "./api";
 import { SiteList } from "./components/SiteList";
 import { CreateSiteModal } from "./components/CreateSiteModal";
 import { PhpSettingsModal } from "./components/PhpSettingsModal";
+import { UpdateBanner } from "./components/UpdateBanner";
 import "./App.css";
 
 function App() {
@@ -10,6 +14,27 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [phpOpen, setPhpOpen] = useState(false);
+  const [version, setVersion] = useState("");
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => {});
+  }, []);
+
+  const checkUpdates = useCallback(async () => {
+    try {
+      const u = await check();
+      if (!u) {
+        alert("You're on the latest version.");
+        return;
+      }
+      if (confirm(`Update to ${u.version}? The app will download it and restart.`)) {
+        await u.downloadAndInstall();
+        await relaunch();
+      }
+    } catch (e) {
+      alert("Update check failed: " + String(e));
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -30,9 +55,11 @@ function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">FP</span>
+          <span className="brand-mark">F</span>
           <div>
-            <h1>FrontPress Local</h1>
+            <h1>
+              FrontPress Local{version ? <span className="ver"> v{version}</span> : null}
+            </h1>
             <p className="subtitle">
               {status
                 ? `${status.sites.length} site${status.sites.length === 1 ? "" : "s"} · PHP default ${
@@ -43,6 +70,9 @@ function App() {
           </div>
         </div>
         <div className="topbar-actions">
+          <button className="btn ghost" onClick={checkUpdates}>
+            Check for updates
+          </button>
           <button className="btn ghost" onClick={() => setPhpOpen(true)}>
             PHP settings
           </button>
@@ -51,6 +81,8 @@ function App() {
           </button>
         </div>
       </header>
+
+      <UpdateBanner />
 
       {error && <div className="banner error">{error}</div>}
 
@@ -90,7 +122,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="empty">
       <div className="empty-card">
-        <div className="empty-mark">FP</div>
+        <div className="empty-mark">F</div>
         <h2>No sites yet</h2>
         <p>
           Create your first FrontPress Studio site. The latest release is pulled

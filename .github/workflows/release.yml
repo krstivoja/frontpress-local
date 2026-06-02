@@ -1,0 +1,79 @@
+name: Release
+
+# Builds FrontPress Local for macOS, signs the auto-updater artifacts, and
+# publishes a GitHub Release + `latest.json` that the app's updater reads.
+#
+# Trigger by pushing a version tag, e.g.:
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Required repository secrets
+# ─────────────────────────────────────────────────────────────────────────────
+# Updater signing (REQUIRED now — without these the app can't verify updates):
+#   TAURI_SIGNING_PRIVATE_KEY           contents of ~/.tauri/frontpress-local.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  the key's password (empty string if none)
+#
+# Apple code signing + notarization (REQUIRED before public distribution —
+# leave unset for now; the build still produces an UNSIGNED app you can test
+# locally, but Gatekeeper will block it on other Macs until these are set):
+#   APPLE_CERTIFICATE          base64 of your Developer ID .p12
+#   APPLE_CERTIFICATE_PASSWORD password for that .p12
+#   APPLE_SIGNING_IDENTITY     e.g. "Developer ID Application: Marko Krstić (TEAMID)"
+#   APPLE_ID                   your Apple ID email
+#   APPLE_PASSWORD             an app-specific password for notarization
+#   APPLE_TEAM_ID              your 10-char Apple Team ID
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (with both Apple targets for a universal build)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build, sign, and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing (verifies the update payload):
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Apple signing + notarization — uncomment once enrolled and the
+          # secrets above are set. Until then the build is unsigned.
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          # Universal binary → runs on Apple Silicon and Intel from one download.
+          args: --target universal-apple-darwin
+          tagName: ${{ github.ref_name }}
+          releaseName: "FrontPress Local ${{ github.ref_name }}"
+          releaseBody: "See the assets below to download. The app auto-updates."
+          releaseDraft: true
+          prerelease: false
+          # tauri-action generates latest.json (the updater manifest) and
+          # attaches it to the release automatically.

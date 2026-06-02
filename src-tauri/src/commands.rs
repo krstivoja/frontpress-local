@@ -98,14 +98,6 @@ pub struct CreateSiteArgs {
     pub php_minor: Option<String>,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Credentials {
-    pub user: String,
-    pub password: String,
-    pub admin_url: String,
-}
-
 #[derive(Clone, Serialize)]
 struct Progress {
     phase: String,
@@ -455,22 +447,6 @@ pub fn reveal_in_finder(state: State<'_, AppState>, id: String) -> CmdResult<()>
     Ok(())
 }
 
-#[tauri::command]
-pub fn get_credentials(state: State<'_, AppState>, id: String) -> CmdResult<Credentials> {
-    let site = {
-        let store = state.store.lock().map_err(err)?;
-        store.site(&id).cloned().ok_or("Unknown site")?
-    };
-    let password = keychain::get_password(&id)
-        .map_err(err)?
-        .unwrap_or_default();
-    Ok(Credentials {
-        user: site.admin_user,
-        password,
-        admin_url: format!("http://localhost:{}/admin/", site.port),
-    })
-}
-
 fn open_url(url: &str) -> CmdResult<()> {
     std::process::Command::new("open")
         .arg(url)
@@ -483,4 +459,11 @@ fn open_url(url: &str) -> CmdResult<()> {
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> CmdResult<Settings> {
     Ok(state.store.lock().map_err(err)?.settings.clone())
+}
+
+/// Test-only: true when launched with FP_SELFTEST_UPDATE set, so the update
+/// banner can auto-apply during an automated end-to-end updater test.
+#[tauri::command]
+pub fn selftest_update() -> bool {
+    std::env::var("FP_SELFTEST_UPDATE").is_ok()
 }

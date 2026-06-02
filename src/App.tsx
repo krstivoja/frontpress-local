@@ -37,6 +37,14 @@ function App() {
 
   return (
     <div className="app">
+      <UpdateBanner
+        update={updater.update}
+        status={updater.status}
+        error={updater.error}
+        install={updater.install}
+        dismiss={updater.dismiss}
+      />
+
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark">F</span>
@@ -62,14 +70,6 @@ function App() {
           </button>
         </div>
       </header>
-
-      <UpdateBanner
-        update={updater.update}
-        status={updater.status}
-        error={updater.error}
-        install={updater.install}
-        dismiss={updater.dismiss}
-      />
 
       {error && <div className="banner error">{error}</div>}
 

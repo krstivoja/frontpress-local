@@ -244,29 +244,40 @@ body {
 }
 
 /* ── Update banner ───────────────────────────────────────── */
+/* Full-bleed strip across the top of the window, above the header. */
 .update-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin: 12px 22px 0;
-  padding: 10px 14px;
+  margin: 0;
+  padding: 11px 22px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--elevation-1);
+  border: none;
+  border-bottom: 1px solid var(--border);
 }
 /* Amber highlight when an update is actually available, so it stands out
    against the neutral zinc UI. Uses the admin's warning-soft token. */
 .update-banner.is-available {
   background: var(--warning-soft-bg);
-  border-color: var(--warning-soft-br);
+  border-bottom-color: var(--warning-soft-br);
 }
 .update-banner.is-available .update-text strong {
   color: var(--warning-soft-fg);
 }
 .update-banner.is-available .update-text .muted {
   color: #92660e;
+}
+/* Dark-orange install button so it reads as part of the amber warning,
+   not the neutral near-black primary used elsewhere. */
+.update-banner.is-available .btn.primary {
+  background: #b45309;
+  border-color: #b45309;
+  color: #ffffff;
+}
+.update-banner.is-available .btn.primary:hover:not(:disabled) {
+  background: #92400e;
+  border-color: #92400e;
 }
 .update-text {
   display: flex;

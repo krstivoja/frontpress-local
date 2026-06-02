@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
 import { api, AppStatus } from "./api";
 import { SiteList } from "./components/SiteList";
 import { CreateSiteModal } from "./components/CreateSiteModal";
 import { PhpSettingsModal } from "./components/PhpSettingsModal";
 import { UpdateBanner } from "./components/UpdateBanner";
+import { useUpdater } from "./lib/useUpdater";
 import "./App.css";
 
 function App() {
@@ -15,25 +14,10 @@ function App() {
   const [creating, setCreating] = useState(false);
   const [phpOpen, setPhpOpen] = useState(false);
   const [version, setVersion] = useState("");
+  const updater = useUpdater();
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => {});
-  }, []);
-
-  const checkUpdates = useCallback(async () => {
-    try {
-      const u = await check();
-      if (!u) {
-        alert("You're on the latest version.");
-        return;
-      }
-      if (confirm(`Update to ${u.version}? The app will download it and restart.`)) {
-        await u.downloadAndInstall();
-        await relaunch();
-      }
-    } catch (e) {
-      alert("Update check failed: " + String(e));
-    }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -70,9 +54,6 @@ function App() {
           </div>
         </div>
         <div className="topbar-actions">
-          <button className="btn ghost" onClick={checkUpdates}>
-            Check for updates
-          </button>
           <button className="btn ghost" onClick={() => setPhpOpen(true)}>
             PHP settings
           </button>
@@ -82,7 +63,13 @@ function App() {
         </div>
       </header>
 
-      <UpdateBanner />
+      <UpdateBanner
+        update={updater.update}
+        status={updater.status}
+        error={updater.error}
+        install={updater.install}
+        dismiss={updater.dismiss}
+      />
 
       {error && <div className="banner error">{error}</div>}
 

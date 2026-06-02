@@ -36,6 +36,9 @@
   --danger-soft-br: #fecaca;
   --success: #15803d;
   --success-soft-bg: #dcfce7;
+  --warning-soft-bg: #fef3c7;
+  --warning-soft-fg: #854d0e;
+  --warning-soft-br: #fde68a;
 
   /* Radii */
   --radius-sm: 4px;
@@ -252,6 +255,18 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--elevation-1);
+}
+/* Amber highlight when an update is actually available, so it stands out
+   against the neutral zinc UI. Uses the admin's warning-soft token. */
+.update-banner.is-available {
+  background: var(--warning-soft-bg);
+  border-color: var(--warning-soft-br);
+}
+.update-banner.is-available .update-text strong {
+  color: var(--warning-soft-fg);
+}
+.update-banner.is-available .update-text .muted {
+  color: #92660e;
 }
 .update-text {
   display: flex;

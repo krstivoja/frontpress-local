@@ -96,6 +96,7 @@ pub fn run() {
             commands::create_site,
             commands::start_site,
             commands::stop_site,
+            commands::stop_all_sites,
             commands::delete_site,
             commands::open_preview,
             commands::auto_login,

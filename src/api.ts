@@ -48,6 +48,7 @@ export const api = {
   createSite: (args: CreateSiteArgs) => invoke<SiteView>("create_site", { args }),
   startSite: (id: string) => invoke<SiteView>("start_site", { id }),
   stopSite: (id: string) => invoke<SiteView>("stop_site", { id }),
+  stopAllSites: () => invoke<void>("stop_all_sites"),
   deleteSite: (id: string, deleteFiles: boolean) =>
     invoke<void>("delete_site", { id, deleteFiles }),
   openPreview: (id: string) => invoke<void>("open_preview", { id }),

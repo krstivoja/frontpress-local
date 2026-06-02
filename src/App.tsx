@@ -62,6 +62,16 @@ function App() {
           </div>
         </div>
         <div className="topbar-actions">
+          <button
+            className="btn ghost"
+            onClick={async () => {
+              await api.stopAllSites();
+              refresh();
+            }}
+            disabled={!status?.sites.some((s) => s.running)}
+          >
+            Stop all
+          </button>
           <button className="btn ghost" onClick={() => setPhpOpen(true)}>
             PHP settings
           </button>

@@ -24,10 +24,17 @@ export function SiteCard({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <div className={`site-card ${site.running ? "is-running" : ""}`}>
+    <div className="site-card">
+      <button
+        className={`site-toggle ${site.running ? "running" : "stopped"}`}
+        disabled={busy}
+        onClick={site.running ? onStop : onStart}
+        title={busy ? "Working…" : site.running ? "Stop site" : "Start site"}
+        aria-label={site.running ? "Stop site" : "Start site"}
+      />
+
       <div className="site-main">
         <div className="site-head">
-          <span className={`dot ${site.running ? "on" : "off"}`} />
           <h3 className="site-name">{site.name}</h3>
           <span className="pill">PHP {site.phpVersion}</span>
           <span className="pill subtle">FP {site.frontpressVersion}</span>
@@ -51,17 +58,8 @@ export function SiteCard({
           Preview
         </button>
         <button className="btn accent" disabled={busy} onClick={onLogin} title="Open the admin, already signed in">
-          Log in
+          Login
         </button>
-        {site.running ? (
-          <button className="btn ghost" disabled={busy} onClick={onStop}>
-            Stop
-          </button>
-        ) : (
-          <button className="btn ghost" disabled={busy} onClick={onStart}>
-            Start
-          </button>
-        )}
         <div className="menu-wrap">
           <button className="btn icon" onClick={() => setMenuOpen((v) => !v)}>
             ⋯

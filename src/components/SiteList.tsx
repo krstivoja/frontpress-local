@@ -26,9 +26,10 @@ export function SiteList({
   };
 
   return (
-    <div className="site-list">
+    <div className="site-list-wrap">
       {error && <div className="banner error">{error}</div>}
-      {sites.map((site) => (
+      <div className="site-list">
+        {sites.map((site) => (
         <SiteCard
           key={site.id}
           site={site}
@@ -41,8 +42,9 @@ export function SiteList({
           onDelete={(deleteFiles) =>
             run(site.id, () => api.deleteSite(site.id, deleteFiles))
           }
-        />
-      ))}
+          />
+        ))}
+      </div>
     </div>
   );
 }

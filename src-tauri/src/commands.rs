@@ -361,6 +361,13 @@ pub fn stop_site(state: State<'_, AppState>, id: String) -> CmdResult<SiteView> 
     Ok(view_of(&site, &state.servers))
 }
 
+/// Stop every running site at once (the header "Stop all" button).
+#[tauri::command]
+pub fn stop_all_sites(state: State<'_, AppState>) -> CmdResult<()> {
+    state.servers.stop_all();
+    Ok(())
+}
+
 fn start_internal(state: &State<'_, AppState>, site: &Site) -> CmdResult<()> {
     let php_bin = paths::php_binary(&site.php_version).map_err(err)?;
     if !php_bin.is_file() {

@@ -43,7 +43,6 @@ export function SiteCard({
           >
             {site.url}
           </a>
-          <span className="muted">· {site.slug}</span>
         </div>
       </div>
 

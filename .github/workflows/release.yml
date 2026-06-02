@@ -73,7 +73,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "FrontPress Local ${{ github.ref_name }}"
           releaseBody: "See the assets below to download. The app auto-updates."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           # tauri-action generates latest.json (the updater manifest) and
           # attaches it to the release automatically.

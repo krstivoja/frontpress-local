@@ -39,9 +39,7 @@ export function SiteList({
           onStart={() => run(site.id, () => api.startSite(site.id))}
           onStop={() => run(site.id, () => api.stopSite(site.id))}
           onReveal={() => run(site.id, () => api.revealInFinder(site.id))}
-          onDelete={(deleteFiles) =>
-            run(site.id, () => api.deleteSite(site.id, deleteFiles))
-          }
+          onDelete={() => run(site.id, () => api.deleteSite(site.id, true))}
           onChanged={onChanged}
           />
         ))}

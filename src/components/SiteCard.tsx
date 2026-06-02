@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { save, message } from "@tauri-apps/plugin-dialog";
 import { api, SiteView } from "../api";
+import { Modal } from "./Modal";
 import { DuplicateModal } from "./DuplicateModal";
 import { RestoreModal } from "./RestoreModal";
 
@@ -22,7 +23,7 @@ export function SiteCard({
   onStart: () => void;
   onStop: () => void;
   onReveal: () => void;
-  onDelete: (deleteFiles: boolean) => void;
+  onDelete: () => void;
   onChanged: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -128,34 +129,29 @@ export function SiteCard({
       </div>
 
       {confirmDelete && (
-        <div className="confirm">
-          <p>
-            Delete <strong>{site.name}</strong>?
+        <Modal
+          title={`Delete “${site.name}”`}
+          onClose={() => setConfirmDelete(false)}
+        >
+          <p className="modal-text">
+            This permanently deletes <strong>{site.name}</strong> and all its
+            files. This can't be undone.
           </p>
-          <div className="confirm-actions">
+          <div className="modal-actions">
             <button className="btn ghost" onClick={() => setConfirmDelete(false)}>
               Cancel
-            </button>
-            <button
-              className="btn"
-              onClick={() => {
-                setConfirmDelete(false);
-                onDelete(false);
-              }}
-            >
-              Remove from list only
             </button>
             <button
               className="btn danger"
               onClick={() => {
                 setConfirmDelete(false);
-                onDelete(true);
+                onDelete();
               }}
             >
-              Delete files too
+              Delete
             </button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {duplicating && (

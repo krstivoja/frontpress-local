@@ -601,6 +601,11 @@ body {
   gap: 8px;
   margin-top: 4px;
 }
+.modal-text {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  line-height: 1.5;
+}
 
 .field {
   display: flex;

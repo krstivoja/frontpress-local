@@ -28,9 +28,18 @@ pub fn php_root() -> Result<PathBuf> {
     Ok(dir)
 }
 
-/// Path to the `php` binary for a fully-qualified version (e.g. "8.3.9").
+/// Filename of the PHP executable on this platform.
+pub fn php_bin_name() -> &'static str {
+    if cfg!(windows) {
+        "php.exe"
+    } else {
+        "php"
+    }
+}
+
+/// Path to the PHP binary for a fully-qualified version (e.g. "8.3.9").
 pub fn php_binary(version: &str) -> Result<PathBuf> {
-    Ok(php_root()?.join(version).join("php"))
+    Ok(php_root()?.join(version).join(php_bin_name()))
 }
 
 /// Default parent directory for new sites: `~/FrontPress Sites`.

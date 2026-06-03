@@ -32,14 +32,24 @@ jobs:
   release:
     permissions:
       contents: write
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: "--target universal-apple-darwin"
+          - os: windows-latest
+            rust-targets: ""
+            args: ""
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust (with both Apple targets for a universal build)
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: ${{ matrix.rust-targets }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -68,8 +78,9 @@ jobs:
           # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          # Universal binary → runs on Apple Silicon and Intel from one download.
-          args: --target universal-apple-darwin
+          # macOS: universal (Apple Silicon + Intel). Windows: default x64.
+          # tauri-action merges each platform into the same release + latest.json.
+          args: ${{ matrix.args }}
           tagName: ${{ github.ref_name }}
           releaseName: "FrontPress Local ${{ github.ref_name }}"
           releaseBody: "See the assets below to download. The app auto-updates."

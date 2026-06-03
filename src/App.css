@@ -123,18 +123,12 @@ body {
   align-items: center;
   gap: 12px;
 }
-/* Brand lockup — mirrors the admin sidebar: zinc-900 rounded square + bold
-   white "F", followed by a tracking-tight wordmark. */
-.brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 14px;
-  color: #ffffff;
-  background: var(--zinc-900);
+/* Brand lockup — the FrontPress Local logo + tracking-tight wordmark. */
+.brand-logo {
+  width: 36px;
+  height: 36px;
+  display: block;
+  flex: none;
 }
 .topbar h1 {
   font-size: var(--fs-lg);
@@ -309,17 +303,11 @@ body {
   border-radius: var(--radius-lg);
   box-shadow: var(--elevation-1);
 }
-.empty-mark {
-  width: 60px;
-  height: 60px;
-  border-radius: 14px;
+.empty-logo {
+  width: 72px;
+  height: 72px;
+  display: block;
   margin: 0 auto 18px;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 26px;
-  color: #ffffff;
-  background: var(--zinc-900);
 }
 .empty-card h2 {
   font-size: var(--fs-xl);

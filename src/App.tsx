@@ -6,6 +6,7 @@ import { CreateSiteModal } from "./components/CreateSiteModal";
 import { PhpSettingsModal } from "./components/PhpSettingsModal";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { useUpdater } from "./lib/useUpdater";
+import logo from "./assets/logo.svg";
 import "./App.css";
 
 function App() {
@@ -47,7 +48,7 @@ function App() {
 
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">F</span>
+          <img src={logo} className="brand-logo" alt="" />
           <div>
             <h1>
               FrontPress Local{version ? <span className="ver"> v{version}</span> : null}
@@ -120,7 +121,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="empty">
       <div className="empty-card">
-        <div className="empty-mark">F</div>
+        <img src={logo} className="empty-logo" alt="" />
         <h2>No sites yet</h2>
         <p>
           Create your first FrontPress Studio site. The latest release is pulled

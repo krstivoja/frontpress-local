@@ -1,63 +1,25 @@
-//! PHP runtime management. Downloads prebuilt static PHP CLI binaries from
-//! static-php.dev (no Homebrew dependency), one directory per fully-qualified
-//! version, and resolves the latest patch for a given minor.
+//! PHP runtime management. Downloads a portable PHP per fully-qualified
+//! version and resolves the latest patch for a given minor.
+//!
+//! - macOS: prebuilt static binaries from static-php.dev (single `php` file).
+//! - Windows: official builds from windows.php.net (php.exe + DLLs + ext/),
+//!   with a generated php.ini that enables the extensions FrontPress needs.
 
 use crate::{net, paths, util};
 use anyhow::{anyhow, Context, Result};
 use futures_util::StreamExt;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-const BASE: &str = "https://dl.static-php.dev/static-php-cli/common";
-
-/// Build-target architecture token used in static-php filenames.
-#[cfg(target_arch = "aarch64")]
+/// Architecture token shown in the UI / used in macOS filenames.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub const ARCH: &str = "aarch64";
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
 pub const ARCH: &str = "x86_64";
-#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
-pub const ARCH: &str = "aarch64";
-
-fn download_url(version: &str) -> String {
-    format!("{BASE}/php-{version}-cli-macos-{ARCH}.tar.gz")
-}
-
-/// Parse a static-php directory listing into the list of full versions
-/// available for this architecture (e.g. "8.3.9"). Order is not guaranteed.
-pub fn parse_listing(body: &str, arch: &str) -> Vec<String> {
-    let suffix = format!("-cli-macos-{arch}.tar.gz");
-    let mut out = Vec::new();
-    for chunk in body.split("php-").skip(1) {
-        if let Some(idx) = chunk.find(&suffix) {
-            let ver = &chunk[..idx];
-            if !ver.is_empty()
-                && ver.contains('.')
-                && ver.chars().all(|c| c.is_ascii_digit() || c == '.')
-            {
-                out.push(ver.to_string());
-            }
-        }
-    }
-    out.sort_by(|a, b| util::parse_version(b).cmp(&util::parse_version(a)));
-    out.dedup();
-    out
-}
-
-/// Fetch the remote catalogue of installable PHP versions, newest first.
-pub async fn remote_versions() -> Result<Vec<String>> {
-    let body = net::client()?
-        .get(format!("{BASE}/"))
-        .send()
-        .await?
-        .error_for_status()?
-        .text()
-        .await?;
-    let versions = parse_listing(&body, ARCH);
-    if versions.is_empty() {
-        return Err(anyhow!("no PHP builds found in static-php listing"));
-    }
-    Ok(versions)
-}
+#[cfg(target_os = "windows")]
+pub const ARCH: &str = "x64";
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub const ARCH: &str = "x86_64";
 
 /// Highest patch release for a given "major.minor".
 pub fn latest_patch(versions: &[String], minor: &str) -> Option<String> {
@@ -68,13 +30,13 @@ pub fn latest_patch(versions: &[String], minor: &str) -> Option<String> {
         .cloned()
 }
 
-/// Versions already downloaded (a `php` binary exists under php/<version>/).
+/// Versions already downloaded (the PHP binary exists under php/<version>/).
 pub fn installed_versions() -> Result<Vec<String>> {
     let root = paths::php_root()?;
     let mut out = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&root) {
         for e in entries.flatten() {
-            if e.path().join("php").is_file() {
+            if e.path().join(paths::php_bin_name()).is_file() {
                 if let Some(name) = e.file_name().to_str() {
                     out.push(name.to_string());
                 }
@@ -85,9 +47,20 @@ pub fn installed_versions() -> Result<Vec<String>> {
     Ok(out)
 }
 
+/// Fetch the remote catalogue of installable PHP versions, newest first.
+pub async fn remote_versions() -> Result<Vec<String>> {
+    #[cfg(target_os = "windows")]
+    {
+        win::remote_versions().await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        mac::remote_versions().await
+    }
+}
+
 /// Ensure the given fully-qualified PHP version is installed locally,
-/// downloading + extracting it if needed. `progress(done, total)` is called
-/// during the download. Returns the path to the `php` binary.
+/// downloading + extracting it if needed. Returns the path to the binary.
 pub async fn ensure_installed<F>(version: &str, progress: F) -> Result<PathBuf>
 where
     F: Fn(u64, Option<u64>),
@@ -96,21 +69,34 @@ where
     if bin.is_file() {
         return Ok(bin);
     }
-
-    // Download the tarball to a temp file alongside the target dir.
     let dir = paths::php_root()?.join(version);
     std::fs::create_dir_all(&dir)?;
-    let tmp = dir.join("download.tar.gz");
 
+    #[cfg(target_os = "windows")]
+    {
+        win::install(version, &dir, &progress).await?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        mac::install(version, &dir, &progress).await?;
+    }
+    Ok(bin)
+}
+
+/// Stream a download to `dest`, reporting progress.
+async fn download_to<F>(url: &str, dest: &Path, progress: &F) -> Result<()>
+where
+    F: Fn(u64, Option<u64>),
+{
     let resp = net::client()?
-        .get(download_url(version))
+        .get(url)
         .send()
         .await?
         .error_for_status()
-        .with_context(|| format!("PHP {version} not available for {ARCH}"))?;
+        .with_context(|| format!("download {url}"))?;
     let total = resp.content_length();
     let mut stream = resp.bytes_stream();
-    let mut file = std::fs::File::create(&tmp)?;
+    let mut file = std::fs::File::create(dest)?;
     let mut done = 0u64;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
@@ -119,81 +105,208 @@ where
         progress(done, total);
     }
     file.flush()?;
-    drop(file);
-
-    // Extract the single `php` entry on a blocking thread.
-    let tmp2 = tmp.clone();
-    let bin2 = bin.clone();
-    tokio::task::spawn_blocking(move || extract_php(&tmp2, &bin2))
-        .await
-        .context("join extract task")??;
-
-    let _ = std::fs::remove_file(&tmp);
-    dequarantine(&bin);
-    Ok(bin)
+    Ok(())
 }
 
-/// Pull the `php` binary out of a static-php tar.gz into `dest`, chmod +x.
-fn extract_php(tarball: &PathBuf, dest: &PathBuf) -> Result<()> {
-    use flate2::read::GzDecoder;
-    let f = std::fs::File::open(tarball)?;
-    let mut archive = tar::Archive::new(GzDecoder::new(f));
-    for entry in archive.entries()? {
-        let mut entry = entry?;
-        let is_php = entry
-            .path()?
-            .file_name()
-            .map(|n| n == "php")
-            .unwrap_or(false);
-        if is_php {
-            entry.unpack(dest)?;
-            set_executable(dest)?;
-            return Ok(());
-        }
+// ── macOS: static-php.dev ────────────────────────────────────────────────────
+#[cfg(not(target_os = "windows"))]
+mod mac {
+    use super::*;
+
+    const BASE: &str = "https://dl.static-php.dev/static-php-cli/common";
+
+    fn download_url(version: &str) -> String {
+        format!("{BASE}/php-{version}-cli-macos-{ARCH}.tar.gz")
     }
-    Err(anyhow!("no `php` binary inside tarball"))
-}
 
-fn set_executable(path: &PathBuf) -> Result<()> {
-    #[cfg(unix)]
+    pub async fn remote_versions() -> Result<Vec<String>> {
+        let body = net::client()?
+            .get(format!("{BASE}/"))
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?;
+        let versions = parse_listing(&body, ARCH);
+        if versions.is_empty() {
+            return Err(anyhow!("no PHP builds found in static-php listing"));
+        }
+        Ok(versions)
+    }
+
+    pub async fn install<F>(version: &str, dir: &Path, progress: &F) -> Result<()>
+    where
+        F: Fn(u64, Option<u64>),
     {
+        let tmp = dir.join("download.tar.gz");
+        download_to(&download_url(version), &tmp, progress)
+            .await
+            .with_context(|| format!("PHP {version} not available for {ARCH}"))?;
+
+        let bin = paths::php_binary(version)?;
+        let tmp2 = tmp.clone();
+        let bin2 = bin.clone();
+        tokio::task::spawn_blocking(move || extract_php(&tmp2, &bin2))
+            .await
+            .context("join extract task")??;
+
+        let _ = std::fs::remove_file(&tmp);
+        dequarantine(&bin);
+        Ok(())
+    }
+
+    fn extract_php(tarball: &Path, dest: &Path) -> Result<()> {
+        use flate2::read::GzDecoder;
+        let f = std::fs::File::open(tarball)?;
+        let mut archive = tar::Archive::new(GzDecoder::new(f));
+        for entry in archive.entries()? {
+            let mut entry = entry?;
+            let is_php = entry.path()?.file_name().map(|n| n == "php").unwrap_or(false);
+            if is_php {
+                entry.unpack(dest)?;
+                set_executable(dest)?;
+                return Ok(());
+            }
+        }
+        Err(anyhow!("no `php` binary inside tarball"))
+    }
+
+    fn set_executable(path: &Path) -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
         let mut perms = std::fs::metadata(path)?.permissions();
         perms.set_mode(0o755);
         std::fs::set_permissions(path, perms)?;
+        Ok(())
     }
-    Ok(())
+
+    /// Strip the macOS quarantine xattr so Gatekeeper doesn't block the binary.
+    fn dequarantine(path: &Path) {
+        let _ = std::process::Command::new("xattr")
+            .args(["-d", "com.apple.quarantine"])
+            .arg(path)
+            .output();
+    }
+
+    /// Parse a static-php directory listing into the available full versions.
+    pub fn parse_listing(body: &str, arch: &str) -> Vec<String> {
+        let suffix = format!("-cli-macos-{arch}.tar.gz");
+        let mut out = Vec::new();
+        for chunk in body.split("php-").skip(1) {
+            if let Some(idx) = chunk.find(&suffix) {
+                let ver = &chunk[..idx];
+                if !ver.is_empty()
+                    && ver.contains('.')
+                    && ver.chars().all(|c| c.is_ascii_digit() || c == '.')
+                {
+                    out.push(ver.to_string());
+                }
+            }
+        }
+        out.sort_by(|a, b| util::parse_version(b).cmp(&util::parse_version(a)));
+        out.dedup();
+        out
+    }
 }
 
-/// Strip the macOS quarantine xattr so Gatekeeper doesn't block the binary.
-/// Best-effort: missing xattr / non-macOS is a no-op.
-fn dequarantine(path: &PathBuf) {
-    let _ = std::process::Command::new("xattr")
-        .args(["-d", "com.apple.quarantine"])
-        .arg(path)
-        .output();
+// ── Windows: windows.php.net ─────────────────────────────────────────────────
+#[cfg(target_os = "windows")]
+mod win {
+    use super::*;
+
+    const RELEASES_JSON: &str = "https://downloads.php.net/~windows/releases/releases.json";
+    const DOWNLOAD_BASE: &str = "https://windows.php.net/downloads/releases";
+
+    /// (full version, zip filename) for each branch's NTS x64 build.
+    async fn releases() -> Result<Vec<(String, String)>> {
+        let json: serde_json::Value = net::client()?
+            .get(RELEASES_JSON)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let mut out = Vec::new();
+        if let Some(obj) = json.as_object() {
+            for (_branch, b) in obj {
+                let ver = match b.get("version").and_then(|v| v.as_str()) {
+                    Some(v) => v.to_string(),
+                    None => continue,
+                };
+                if let Some(bo) = b.as_object() {
+                    for (k, v) in bo {
+                        let kl = k.to_lowercase();
+                        if kl.contains("nts") && kl.contains("x64") {
+                            if let Some(path) = v
+                                .get("zip")
+                                .and_then(|z| z.get("path"))
+                                .and_then(|p| p.as_str())
+                            {
+                                out.push((ver, path.to_string()));
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    pub async fn remote_versions() -> Result<Vec<String>> {
+        let mut v: Vec<String> = releases().await?.into_iter().map(|(ver, _)| ver).collect();
+        if v.is_empty() {
+            return Err(anyhow!("no Windows PHP builds found"));
+        }
+        v.sort_by(|a, b| util::parse_version(b).cmp(&util::parse_version(a)));
+        v.dedup();
+        Ok(v)
+    }
+
+    pub async fn install<F>(version: &str, dir: &Path, progress: &F) -> Result<()>
+    where
+        F: Fn(u64, Option<u64>),
+    {
+        let file = releases()
+            .await?
+            .into_iter()
+            .find(|(ver, _)| ver == version)
+            .map(|(_, f)| f)
+            .ok_or_else(|| anyhow!("PHP {version} not available for Windows"))?;
+        let url = format!("{DOWNLOAD_BASE}/{file}");
+
+        let tmp = dir.join("download.zip");
+        download_to(&url, &tmp, progress).await?;
+
+        let dir2 = dir.to_path_buf();
+        let tmp2 = tmp.clone();
+        tokio::task::spawn_blocking(move || crate::siteops::unzip(&tmp2, &dir2))
+            .await
+            .context("join unzip task")??;
+        let _ = std::fs::remove_file(&tmp);
+
+        write_php_ini(dir)?;
+        Ok(())
+    }
+
+    /// php.exe loads php.ini from its own directory; enable the extensions
+    /// FrontPress needs and point extension_dir at the absolute ext/ folder.
+    fn write_php_ini(dir: &Path) -> Result<()> {
+        let ext = dir.join("ext").to_string_lossy().replace('\\', "/");
+        let mut ini = format!("extension_dir=\"{ext}\"\n");
+        for e in [
+            "mbstring", "openssl", "curl", "gd", "fileinfo", "sqlite3",
+            "pdo_sqlite", "exif", "zip", "intl",
+        ] {
+            ini.push_str(&format!("extension={e}\n"));
+        }
+        std::fs::write(dir.join("php.ini"), ini)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parse_listing_extracts_versions() {
-        let html = r#"
-            <a href="/static-php-cli/common/php-8.1.34-cli-macos-aarch64.tar.gz">x</a>
-            <a href="/static-php-cli/common/php-8.3.9-cli-macos-aarch64.tar.gz">x</a>
-            <a href="/static-php-cli/common/php-8.3.7-cli-macos-aarch64.tar.gz">x</a>
-            <a href="/static-php-cli/common/php-8.2.21-cli-macos-x86_64.tar.gz">x</a>
-            <a href="/static-php-cli/common/php-8.4.1-cli-macos-aarch64.tar.gz">x</a>
-        "#;
-        let v = parse_listing(html, "aarch64");
-        assert_eq!(v.first().map(String::as_str), Some("8.4.1")); // newest first
-        assert!(v.contains(&"8.1.34".to_string()));
-        assert!(v.contains(&"8.3.9".to_string()));
-        // x86_64-only entries excluded for aarch64
-        assert!(!v.contains(&"8.2.21".to_string()));
-    }
 
     #[test]
     fn latest_patch_picks_highest() {
@@ -206,5 +319,20 @@ mod tests {
         assert_eq!(latest_patch(&v, "8.3"), Some("8.3.10".to_string()));
         assert_eq!(latest_patch(&v, "8.1"), Some("8.1.34".to_string()));
         assert_eq!(latest_patch(&v, "8.9"), None);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn parse_listing_extracts_versions() {
+        let html = r#"
+            <a href="/static-php-cli/common/php-8.1.34-cli-macos-aarch64.tar.gz">x</a>
+            <a href="/static-php-cli/common/php-8.3.9-cli-macos-aarch64.tar.gz">x</a>
+            <a href="/static-php-cli/common/php-8.2.21-cli-macos-x86_64.tar.gz">x</a>
+            <a href="/static-php-cli/common/php-8.4.1-cli-macos-aarch64.tar.gz">x</a>
+        "#;
+        let v = mac::parse_listing(html, "aarch64");
+        assert_eq!(v.first().map(String::as_str), Some("8.4.1"));
+        assert!(v.contains(&"8.1.34".to_string()));
+        assert!(!v.contains(&"8.2.21".to_string()));
     }
 }

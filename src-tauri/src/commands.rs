@@ -646,17 +646,41 @@ pub fn auto_login(state: State<'_, AppState>, id: String) -> CmdResult<()> {
 
 #[tauri::command]
 pub fn reveal_in_finder(state: State<'_, AppState>, id: String) -> CmdResult<()> {
-    let store = state.store.lock().map_err(err)?;
-    let site = store.site(&id).cloned().ok_or("Unknown site")?;
+    let path = {
+        let store = state.store.lock().map_err(err)?;
+        store.site(&id).cloned().ok_or("Unknown site")?.path
+    };
+    #[cfg(target_os = "macos")]
     std::process::Command::new("open")
-        .args(["-R", &site.path])
+        .args(["-R", &path])
+        .spawn()
+        .map_err(err)?;
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("explorer")
+        .arg(format!("/select,{path}"))
+        .spawn()
+        .map_err(err)?;
+    #[cfg(all(unix, not(target_os = "macos")))]
+    std::process::Command::new("xdg-open")
+        .arg(&path)
         .spawn()
         .map_err(err)?;
     Ok(())
 }
 
 fn open_url(url: &str) -> CmdResult<()> {
+    #[cfg(target_os = "macos")]
     std::process::Command::new("open")
+        .arg(url)
+        .spawn()
+        .map_err(err)?;
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", url])
+        .spawn()
+        .map_err(err)?;
+    #[cfg(all(unix, not(target_os = "macos")))]
+    std::process::Command::new("xdg-open")
         .arg(url)
         .spawn()
         .map_err(err)?;

@@ -45,14 +45,15 @@ pub fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
 }
 
 /// Zip the *contents* of `src_dir` (entries relative to it, no wrapper folder)
-/// into `zip_path`. Symlinks are skipped.
-pub fn zip_dir(src_dir: &Path, zip_path: &Path) -> Result<()> {
+/// into `zip_path`. Symlinks and any entry whose file name is in `exclude`
+/// are skipped.
+pub fn zip_dir(src_dir: &Path, zip_path: &Path, exclude: &[&str]) -> Result<()> {
     let file = std::fs::File::create(zip_path)?;
     let mut zip = zip::ZipWriter::new(file);
     let opts: zip::write::SimpleFileOptions =
         zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     let mut buf = Vec::new();
-    add_to_zip(&mut zip, &opts, src_dir, src_dir, &mut buf)?;
+    add_to_zip(&mut zip, &opts, src_dir, src_dir, exclude, &mut buf)?;
     zip.finish()?;
     Ok(())
 }
@@ -62,6 +63,7 @@ fn add_to_zip<W: Write + std::io::Seek>(
     opts: &zip::write::SimpleFileOptions,
     base: &Path,
     dir: &Path,
+    exclude: &[&str],
     buf: &mut Vec<u8>,
 ) -> Result<()> {
     for entry in std::fs::read_dir(dir)? {
@@ -70,12 +72,17 @@ fn add_to_zip<W: Write + std::io::Seek>(
         if ft.is_symlink() {
             continue;
         }
+        if let Some(name) = entry.file_name().to_str() {
+            if exclude.contains(&name) {
+                continue;
+            }
+        }
         let path = entry.path();
         let rel = path.strip_prefix(base)?;
         let name = rel.to_string_lossy().replace('\\', "/");
         if ft.is_dir() {
             zip.add_directory(format!("{name}/"), *opts)?;
-            add_to_zip(zip, opts, base, &path, buf)?;
+            add_to_zip(zip, opts, base, &path, exclude, buf)?;
         } else {
             zip.start_file(name, *opts)?;
             buf.clear();
@@ -120,24 +127,6 @@ pub fn unzip(zip_path: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Read the admin username out of a site's `config.php` (the last
-/// single-quoted token on the `FPS_ADMIN_USER` define line). Falls back to
-/// "admin".
-pub fn read_admin_user(site_dir: &Path) -> String {
-    if let Ok(s) = std::fs::read_to_string(site_dir.join("config.php")) {
-        for line in s.lines() {
-            if line.trim_start().starts_with("define('FPS_ADMIN_USER'") {
-                let quoted: Vec<&str> = line.split('\'').collect();
-                // tokens: ["define(", "FPS_ADMIN_USER", ", ", "admin", ");"]
-                if quoted.len() >= 4 {
-                    return quoted[quoted.len() - 2].to_string();
-                }
-            }
-        }
-    }
-    "admin".to_string()
-}
-
 /// Write the backup metadata sidecar into a site dir (called just before zip).
 pub fn write_meta(site_dir: &Path, meta: &BackupMeta) -> Result<()> {
     let json = serde_json::to_string_pretty(meta)?;
@@ -155,9 +144,13 @@ pub fn take_meta(site_dir: &Path) -> Option<BackupMeta> {
     meta
 }
 
-/// Validate that an extracted directory actually looks like a FrontPress site.
-pub fn looks_like_site(dir: &Path) -> Result<()> {
-    if dir.join("router.php").is_file() && dir.join("index.php").is_file() {
+/// Validate that an extracted directory looks like a FrontPress `site/` folder
+/// (content / themes / config.json) — what our backups contain.
+pub fn looks_like_site_folder(dir: &Path) -> Result<()> {
+    if dir.join("config.json").is_file()
+        || dir.join("content").is_dir()
+        || dir.join("themes").is_dir()
+    {
         Ok(())
     } else {
         Err(anyhow!("That zip doesn't look like a FrontPress site backup"))

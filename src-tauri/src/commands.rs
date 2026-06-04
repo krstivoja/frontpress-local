@@ -523,7 +523,8 @@ pub async fn duplicate_site(
     Ok(view_of(&site, &state.servers))
 }
 
-/// Zip the entire site directory to `dest` (a path picked by the save dialog).
+/// Zip the site's `site/` folder (content, themes, config, uploads) to `dest`.
+/// The framework itself isn't backed up — it's re-downloadable.
 #[tauri::command]
 pub async fn backup_site(
     state: State<'_, AppState>,
@@ -534,7 +535,13 @@ pub async fn backup_site(
         let store = state.store.lock().map_err(err)?;
         store.site(&id).cloned().ok_or("Unknown site")?
     };
-    let src_dir = PathBuf::from(&site.path);
+    let site_dir = PathBuf::from(&site.path).join("site");
+    if !site_dir.is_dir() {
+        return Err(
+            "Open this site once (Preview or Login) so its content folder exists, then back it up."
+                .into(),
+        );
+    }
     let meta = siteops::BackupMeta {
         name: site.name.clone(),
         php_version: site.php_version.clone(),
@@ -543,11 +550,11 @@ pub async fn backup_site(
     };
     let dest_path = PathBuf::from(dest);
     tokio::task::spawn_blocking(move || {
-        // Drop a metadata sidecar in, zip, then remove it so restore can
-        // recover the name / versions.
-        siteops::write_meta(&src_dir, &meta)?;
-        let res = siteops::zip_dir(&src_dir, &dest_path);
-        let _ = std::fs::remove_file(src_dir.join(siteops::META_FILE));
+        // Drop a metadata sidecar in, zip (minus the one-shot login token and
+        // the regenerable cache), then remove it.
+        siteops::write_meta(&site_dir, &meta)?;
+        let res = siteops::zip_dir(&site_dir, &dest_path, &[".fp-local-login", "cache"]);
+        let _ = std::fs::remove_file(site_dir.join(siteops::META_FILE));
         res
     })
     .await
@@ -556,10 +563,10 @@ pub async fn backup_site(
     Ok(())
 }
 
-/// Restore a specific site IN PLACE from one of its backup zips: stop it, swap
-/// its folder for the backup contents, then start it again. Name, port, and id
-/// are preserved — you're rolling THIS site back to a snapshot, not importing a
-/// new one. A copy of the current files is held aside until the swap succeeds.
+/// Restore a specific site's content IN PLACE from one of its backup zips:
+/// stop it, swap only its `site/` folder for the backup contents, then start
+/// it again. The framework, config.php and login bridge are left untouched —
+/// you're rolling this site's content back to a snapshot.
 #[tauri::command]
 pub async fn restore_into_site(
     app: AppHandle,
@@ -567,7 +574,7 @@ pub async fn restore_into_site(
     id: String,
     zip_path: String,
 ) -> CmdResult<SiteView> {
-    let mut site = {
+    let site = {
         let store = state.store.lock().map_err(err)?;
         store.site(&id).cloned().ok_or("Unknown site")?
     };
@@ -589,46 +596,30 @@ pub async fn restore_into_site(
             let _ = std::fs::remove_dir_all(&tmp_dir);
             err(e)
         })?;
-    if let Err(e) = siteops::looks_like_site(&tmp_dir) {
+    if let Err(e) = siteops::looks_like_site_folder(&tmp_dir) {
         let _ = std::fs::remove_dir_all(&tmp_dir);
         return Err(err(e));
     }
+    let _ = siteops::take_meta(&tmp_dir); // discard the sidecar from the restored content
 
-    // Stop the site, then swap folders (current → aside, backup → live).
+    // Stop the site, then swap ONLY the site/ folder (current → aside, backup
+    // → live), leaving the framework in place.
     state.servers.stop(&id).map_err(err)?;
-    let site_dir = PathBuf::from(&site.path);
+    let site_sub = PathBuf::from(&site.path).join("site");
     let bak_dir = parent.join(format!(".bak-{}", util::random_id()));
-    emit_progress(&app, "config", "Replacing site files…", 0, None);
-    if site_dir.exists() {
-        std::fs::rename(&site_dir, &bak_dir).map_err(|e| {
+    emit_progress(&app, "config", "Restoring content…", 0, None);
+    if site_sub.exists() {
+        std::fs::rename(&site_sub, &bak_dir).map_err(|e| {
             let _ = std::fs::remove_dir_all(&tmp_dir);
             err(e)
         })?;
     }
-    if let Err(e) = std::fs::rename(&tmp_dir, &site_dir) {
-        let _ = std::fs::rename(&bak_dir, &site_dir); // roll back
+    if let Err(e) = std::fs::rename(&tmp_dir, &site_sub) {
+        let _ = std::fs::rename(&bak_dir, &site_sub); // roll back
         let _ = std::fs::remove_dir_all(&tmp_dir);
         return Err(err(e));
     }
     let _ = std::fs::remove_dir_all(&bak_dir);
-
-    // Recover metadata, refresh the login bridge + admin user, persist.
-    let meta = siteops::take_meta(&site_dir);
-    frontpress::write_login_helper(&site_dir).map_err(err)?;
-    site.admin_user = siteops::read_admin_user(&site_dir);
-    if let Some(m) = meta {
-        if !m.frontpress_version.is_empty() {
-            site.frontpress_version = m.frontpress_version;
-        }
-    }
-    {
-        let mut store = state.store.lock().map_err(err)?;
-        if let Some(s) = store.sites.iter_mut().find(|s| s.id == id) {
-            s.admin_user = site.admin_user.clone();
-            s.frontpress_version = site.frontpress_version.clone();
-        }
-        store.save().map_err(err)?;
-    }
 
     php::ensure_installed(&site.php_version, |_, _| {})
         .await

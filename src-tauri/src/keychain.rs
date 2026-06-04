@@ -12,7 +12,9 @@ fn entry(site_id: &str) -> Result<Entry> {
     Entry::new(SERVICE, site_id).context("open keychain entry")
 }
 
-/// Store (or replace) the admin password for a site.
+/// Store (or replace) the admin password for a site. Retained for a future
+/// "set password" feature; sites currently use FrontPress's known default.
+#[allow(dead_code)]
 pub fn set_password(site_id: &str, password: &str) -> Result<()> {
     entry(site_id)?
         .set_password(password)

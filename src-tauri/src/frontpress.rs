@@ -147,8 +147,13 @@ fn extract_zip_stripped(zip_path: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+// The config.php writer below is retained (with tests) for a future
+// "set / change password" feature. New sites currently run on FrontPress's
+// shipped sample.config.php defaults, so nothing here is called at runtime.
+
 /// Build a `config.php` from the install's `sample.config.php`, substituting
 /// the admin username and bcrypt password hash.
+#[allow(dead_code)]
 pub fn render_config_php(sample: &str, user: &str, pass_hash: &str) -> String {
     let user_line = format!("define('FPS_ADMIN_USER', '{}');", esc(user));
     let hash_line = format!("define('FPS_ADMIN_PASS_HASH', '{}');", esc(pass_hash));
@@ -168,12 +173,14 @@ pub fn render_config_php(sample: &str, user: &str, pass_hash: &str) -> String {
 }
 
 /// Escape a value for single-quoted PHP string context.
+#[allow(dead_code)]
 fn esc(s: &str) -> String {
     s.replace('\\', "\\\\").replace('\'', "\\'")
 }
 
 /// Write `config.php` next to `sample.config.php` for the freshly installed
 /// site, using the given username and bcrypt hash.
+#[allow(dead_code)]
 pub fn write_config(site_dir: &Path, user: &str, pass_hash: &str) -> Result<()> {
     let sample = std::fs::read_to_string(site_dir.join("sample.config.php"))
         .context("read sample.config.php")?;
@@ -193,6 +200,7 @@ pub fn write_login_helper(site_dir: &Path) -> Result<()> {
 }
 
 /// Compute the bcrypt hash FrontPress's `password_verify()` will accept.
+#[allow(dead_code)]
 pub fn bcrypt_hash(password: &str) -> Result<String> {
     bcrypt::hash(password, 12).context("bcrypt hash")
 }

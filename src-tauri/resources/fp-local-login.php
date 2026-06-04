@@ -32,12 +32,14 @@ if ($want === '' || $have === '' || !hash_equals($have, $want)) {
     exit;
 }
 
-// Read the configured admin username from config.php without booting the
-// whole framework. config.php is guarded by FRONTPRESS_BOOT.
+// Read the configured admin username without booting the whole framework.
+// config.php is guarded by FRONTPRESS_BOOT; if it doesn't exist yet the site
+// runs on sample.config.php's shipped defaults, so fall back to that.
 define('FRONTPRESS_BOOT', true);
-$configFile = $appRoot . '/config.php';
-if (is_file($configFile)) {
-    require $configFile;
+if (is_file($appRoot . '/config.php')) {
+    require $appRoot . '/config.php';
+} elseif (is_file($appRoot . '/sample.config.php')) {
+    require $appRoot . '/sample.config.php';
 }
 $user = defined('FPS_ADMIN_USER') ? (string) FPS_ADMIN_USER : 'fpsadmin';
 

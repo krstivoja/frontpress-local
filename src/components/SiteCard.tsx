@@ -46,6 +46,15 @@ export function SiteCard({
     }
   };
 
+  const openInEditor = async () => {
+    setMenuOpen(false);
+    try {
+      await api.openInEditor(site.id);
+    } catch (e) {
+      await message(String(e), { title: "Open in editor", kind: "warning" });
+    }
+  };
+
   return (
     <div className="site-card">
       <button
@@ -97,6 +106,7 @@ export function SiteCard({
               >
                 Duplicate…
               </button>
+              <button onClick={openInEditor}>Open in editor</button>
               <button onClick={backup}>Back up…</button>
               <button
                 onClick={() => {

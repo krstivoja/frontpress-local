@@ -3,7 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { api, AppStatus } from "./api";
 import { SiteList } from "./components/SiteList";
 import { CreateSiteModal } from "./components/CreateSiteModal";
-import { PhpSettingsModal } from "./components/PhpSettingsModal";
+import { SettingsModal } from "./components/SettingsModal";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { useUpdater } from "./lib/useUpdater";
 import logo from "./assets/logo.svg";
@@ -13,7 +13,7 @@ function App() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [phpOpen, setPhpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [version, setVersion] = useState("");
   const updater = useUpdater();
 
@@ -73,8 +73,8 @@ function App() {
           >
             Stop all
           </button>
-          <button className="btn ghost" onClick={() => setPhpOpen(true)}>
-            PHP settings
+          <button className="btn ghost" onClick={() => setSettingsOpen(true)}>
+            Settings
           </button>
           <button className="btn primary" onClick={() => setCreating(true)}>
             + New site
@@ -104,10 +104,10 @@ function App() {
         />
       )}
 
-      {phpOpen && (
-        <PhpSettingsModal
+      {settingsOpen && (
+        <SettingsModal
           onClose={() => {
-            setPhpOpen(false);
+            setSettingsOpen(false);
             refresh();
           }}
         />

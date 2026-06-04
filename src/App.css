@@ -388,16 +388,22 @@ body {
   background: #a1a1aa;
   position: relative;
 }
-/* Diagonal slash so a stopped site reads clearly as "off". */
+/* A small white "✕" so a stopped site reads clearly as "off". */
+.site-toggle.stopped::before,
 .site-toggle.stopped::after {
   content: "";
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 22px;
+  width: 13px;
   height: 2px;
   border-radius: 1px;
   background: #ffffff;
+}
+.site-toggle.stopped::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.site-toggle.stopped::after {
   transform: translate(-50%, -50%) rotate(-45deg);
 }
 .site-toggle.stopped:hover:not(:disabled) {
@@ -405,6 +411,7 @@ body {
   background: #22c55e;
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.3), 0 0 7px 3px rgba(34, 197, 94, 0.25);
 }
+.site-toggle.stopped:hover:not(:disabled)::before,
 .site-toggle.stopped:hover:not(:disabled)::after {
   display: none;
 }
@@ -626,6 +633,15 @@ body {
 }
 .field small {
   font-size: var(--fs-xs);
+}
+
+.row-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.row-inline input {
+  flex: 1;
 }
 
 .radio-row {

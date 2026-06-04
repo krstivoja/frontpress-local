@@ -34,6 +34,9 @@ pub fn random_id() -> String {
 }
 
 /// Human-typable random password (no ambiguous chars), ~18 chars.
+/// Retained for a future "set/rotate password" feature; sites currently use
+/// FrontPress's known default so the operator can change it from the admin.
+#[allow(dead_code)]
 pub fn random_password() -> String {
     const CHARS: &[u8] = b"abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let mut rng = rand::thread_rng();

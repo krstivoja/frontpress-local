@@ -69,6 +69,7 @@ pub struct AppStatus {
     pub min_php: String,
     pub arch: String,
     pub installed_php: Vec<String>,
+    pub editor: String,
 }
 
 #[derive(Serialize)]
@@ -139,7 +140,81 @@ pub fn app_status(state: State<'_, AppState>) -> CmdResult<AppStatus> {
         min_php: store.settings.min_php.clone(),
         arch: php::ARCH.to_string(),
         installed_php: php::installed_versions().unwrap_or_default(),
+        editor: store.settings.editor.clone(),
     })
+}
+
+/// Editors detected on this machine (the favorite-editor picker offers these).
+#[tauri::command]
+pub fn list_editors() -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    {
+        let candidates = [
+            "Visual Studio Code",
+            "Cursor",
+            "Windsurf",
+            "Zed",
+            "Sublime Text",
+            "PhpStorm",
+            "Nova",
+            "VSCodium",
+            "BBEdit",
+        ];
+        let mut roots = vec![PathBuf::from("/Applications")];
+        if let Some(home) = dirs::home_dir() {
+            roots.push(home.join("Applications"));
+        }
+        candidates
+            .iter()
+            .filter(|name| roots.iter().any(|r| r.join(format!("{name}.app")).exists()))
+            .map(|s| s.to_string())
+            .collect()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Vec::new()
+    }
+}
+
+/// Set the favorite editor (app name / command).
+#[tauri::command]
+pub fn set_editor(state: State<'_, AppState>, editor: String) -> CmdResult<()> {
+    let mut store = state.store.lock().map_err(err)?;
+    store.settings.editor = editor.trim().to_string();
+    store.save().map_err(err)?;
+    Ok(())
+}
+
+/// Open a site's folder in the configured editor.
+#[tauri::command]
+pub fn open_in_editor(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    let (editor, path) = {
+        let store = state.store.lock().map_err(err)?;
+        let editor = store.settings.editor.clone();
+        let path = store.site(&id).cloned().ok_or("Unknown site")?.path;
+        (editor, path)
+    };
+    if editor.trim().is_empty() {
+        return Err("No editor chosen yet — pick one in Settings.".into());
+    }
+    // Open the editable `site/` folder (content, themes, config, uploads) —
+    // not the whole framework. Fall back to the webroot if it isn't seeded yet.
+    let webroot = PathBuf::from(&path);
+    let target = webroot.join("site");
+    let target = if target.is_dir() { target } else { webroot };
+    let target = target.to_string_lossy().to_string();
+
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .args(["-a", &editor, &target])
+        .spawn()
+        .map_err(err)?;
+    #[cfg(not(target_os = "macos"))]
+    std::process::Command::new(&editor)
+        .arg(&target)
+        .spawn()
+        .map_err(err)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -306,16 +381,14 @@ pub async fn create_site(
         err(e)
     })?;
 
-    // 4. Credentials + config.php + login bridge.
+    // 4. Login bridge only. We deliberately DON'T generate config.php —
+    //    FrontPress runs on its shipped sample.config.php defaults
+    //    (fpsadmin / fpspass, dev env) and promotes sample → config.php
+    //    itself on the first credential change.
     emit_progress(&app, "config", "Configuring site…", 0, None);
-    let admin_user = "admin".to_string();
-    let password = util::random_password();
-    let hash = frontpress::bcrypt_hash(&password).map_err(err)?;
-    frontpress::write_config(&site_dir, &admin_user, &hash).map_err(err)?;
+    let admin_user = crate::store::DEFAULT_ADMIN_USER.to_string();
     frontpress::write_login_helper(&site_dir).map_err(err)?;
-
     let id = util::random_id();
-    keychain::set_password(&id, &password).map_err(err)?;
 
     // 5. Persist.
     let site = Site {
@@ -416,15 +489,12 @@ pub async fn duplicate_site(
             err(e)
         })?;
 
-    // Fresh credentials + login bridge for the copy.
-    let admin_user = "admin".to_string();
-    let password = util::random_password();
-    let hash = frontpress::bcrypt_hash(&password).map_err(err)?;
-    frontpress::write_config(&dst_dir, &admin_user, &hash).map_err(err)?;
+    // Reset the copy to FrontPress's shipped defaults: drop any config.php so
+    // it falls back to sample.config.php (fpsadmin / fpspass). Keep the bridge.
+    let admin_user = crate::store::DEFAULT_ADMIN_USER.to_string();
+    let _ = std::fs::remove_file(dst_dir.join("config.php"));
     frontpress::write_login_helper(&dst_dir).map_err(err)?;
-
     let new_id = util::random_id();
-    keychain::set_password(&new_id, &password).map_err(err)?;
 
     // The source's PHP should already be installed; make sure.
     php::ensure_installed(&src.php_version, |_, _| {})

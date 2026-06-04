@@ -19,6 +19,7 @@ export interface AppStatus {
   minPhp: string;
   arch: string;
   installedPhp: string[];
+  editor: string;
 }
 
 export interface PhpOption {
@@ -60,6 +61,9 @@ export const api = {
   openPreview: (id: string) => invoke<void>("open_preview", { id }),
   autoLogin: (id: string) => invoke<void>("auto_login", { id }),
   revealInFinder: (id: string) => invoke<void>("reveal_in_finder", { id }),
+  openInEditor: (id: string) => invoke<void>("open_in_editor", { id }),
+  listEditors: () => invoke<string[]>("list_editors"),
+  setEditor: (editor: string) => invoke<void>("set_editor", { editor }),
   selftestUpdate: () => invoke<boolean>("selftest_update"),
 };
 

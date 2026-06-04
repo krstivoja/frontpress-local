@@ -106,6 +106,9 @@ pub fn run() {
             commands::open_preview,
             commands::auto_login,
             commands::reveal_in_finder,
+            commands::open_in_editor,
+            commands::list_editors,
+            commands::set_editor,
             commands::get_settings,
             commands::selftest_update,
         ])

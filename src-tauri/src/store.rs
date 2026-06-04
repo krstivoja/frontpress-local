@@ -12,6 +12,13 @@ pub const MIN_PHP_DEFAULT: &str = "8.1";
 /// Default PHP minor we steer new installs toward.
 pub const PREFERRED_PHP_MINOR: &str = "8.3";
 
+/// FrontPress Studio's shipped default credentials. We use these so the
+/// operator knows the current password and can change it from the admin
+/// (FrontPress requires the current password as a second factor).
+pub const DEFAULT_ADMIN_USER: &str = "fpsadmin";
+#[allow(dead_code)]
+pub const DEFAULT_ADMIN_PASS: &str = "fpspass";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Site {
     pub id: String,
@@ -37,6 +44,11 @@ pub struct Settings {
     /// Minimum PHP FrontPress accepts.
     #[serde(default = "default_min_php")]
     pub min_php: String,
+    /// Favorite editor to open site folders with. On macOS this is the app
+    /// name used with `open -a` (e.g. "Visual Studio Code"); elsewhere it's
+    /// the editor command. Empty = none chosen.
+    #[serde(default)]
+    pub editor: String,
 }
 
 fn default_min_php() -> String {
@@ -48,6 +60,7 @@ impl Default for Settings {
         Settings {
             global_php_version: String::new(),
             min_php: default_min_php(),
+            editor: String::new(),
         }
     }
 }

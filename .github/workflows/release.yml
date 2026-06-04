@@ -39,9 +39,11 @@ jobs:
           - os: macos-latest
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
             args: "--target universal-apple-darwin"
-          - os: windows-latest
-            rust-targets: ""
-            args: ""
+          # Windows is wired up but deferred for now (untested on a real
+          # Windows machine). Uncomment to ship the .exe/.msi alongside macOS:
+          # - os: windows-latest
+          #   rust-targets: ""
+          #   args: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

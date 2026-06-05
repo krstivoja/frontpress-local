@@ -22,6 +22,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [siteCount, setSiteCount] = useState(0);
   const [movingSites, setMovingSites] = useState(false);
 
+  const [tab, setTab] = useState<"php" | "editor" | "location">("php");
+
   const load = async () => {
     try {
       const [cat, status, eds] = await Promise.all([
@@ -122,10 +124,31 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal title="Settings" onClose={onClose}>
+      <div className="tabs">
+        <button
+          className={`tab ${tab === "php" ? "active" : ""}`}
+          onClick={() => setTab("php")}
+        >
+          PHP Manager
+        </button>
+        <button
+          className={`tab ${tab === "editor" ? "active" : ""}`}
+          onClick={() => setTab("editor")}
+        >
+          Editor
+        </button>
+        <button
+          className={`tab ${tab === "location" ? "active" : ""}`}
+          onClick={() => setTab("location")}
+        >
+          Location
+        </button>
+      </div>
+
       {error && <div className="banner error">{error}</div>}
 
-      {/* ── Sites location ─────────────────────────────── */}
-      <div className="field">
+      {/* ── Location ───────────────────────────────────── */}
+      <div className="field" hidden={tab !== "location"}>
         <span>Sites location</span>
         <div className="row-inline">
           <input readOnly value={sitesDir} title={sitesDir} />
@@ -148,7 +171,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* ── Editor ─────────────────────────────────────── */}
-      <div className="field">
+      <div className="field" hidden={tab !== "editor"}>
         <span>Editor</span>
         <select value={picker} onChange={(e) => onPick(e.target.value)}>
           <option value="">None</option>
@@ -187,7 +210,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* ── PHP runtimes ───────────────────────────────── */}
-      <div className="field">
+      <div className="field" hidden={tab !== "php"}>
         <span>PHP runtimes</span>
         <small className="muted">
           Static PHP builds for {catalog?.arch ?? "your Mac"}. Minimum:{" "}

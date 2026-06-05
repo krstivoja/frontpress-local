@@ -602,10 +602,40 @@ body {
   line-height: 1.5;
 }
 
+/* Settings tabs */
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+.tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 7px 14px;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--zinc-950);
+}
+
 .field {
   display: flex;
   flex-direction: column;
   gap: 7px;
+}
+.field[hidden] {
+  display: none;
 }
 .field > span {
   font-size: var(--fs-micro);

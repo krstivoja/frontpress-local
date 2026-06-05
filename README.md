@@ -1,22 +1,35 @@
-# Tauri + React + Typescript
+# FrontPress Local
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+Run [FrontPress Studio](https://github.com/krstivoja/frontpress-studio) sites on your Mac — no WordPress, no database, no Docker. A small native app (Tauri + Rust) that downloads PHP for you, serves each site on its own local port, and gives you one‑click preview and admin login.
 
-## Recommended IDE Setup
+Because FrontPress is a **flat‑file** CMS, a "site" is just a folder. That means sites are trivially **portable, syncable (Dropbox / Google Drive), importable, and shareable** — which the app leans into.
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+---
 
+## Download
 
-## Installation
+Grab the latest `.dmg` from the **[Releases page](https://github.com/krstivoja/frontpress-local/releases/latest)**, drag the app to Applications, and open it. (macOS only for now.)
 
-Once you download the latest DMG release, open it and drag the application into your Applications folder.
+The first launch needs a one‑time **"Open Anyway"** in System Settings (the app isn't notarized yet) — see [Installation](docs/installation.md).
 
-The first time you launch the app, you will need to go to System Settings → Privacy & Security and allow the application to run.
+---
 
-The reason for this extra step is that Apple requires a paid annual developer certificate to sign and notarize macOS applications. Since this project is currently open source, I have not yet invested in that certificate. Once the project receives enough funding or community support, I plan to purchase the certificate and remove this requirement.
+## Documentation
 
-Until then, you will need to complete this one-time setup step when installing the application.
+- 📦 **[Installation](docs/installation.md)** — download, the first‑run security step, updates
+- 🌐 **[Creating & managing websites](docs/websites.md)** — new site, preview, login, start/stop, **duplicate**, **back up**, **restore**, delete, open in editor
+- 🐘 **[Managing PHP](docs/php.md)** — installing PHP versions, the global default, per‑site versions
+- ✏️ **[Editor](docs/editor.md)** — pick a favorite editor and open a site's folder in it
+- ☁️ **[Sites location & sync](docs/syncing.md)** — change where sites live, move them to Dropbox / Google Drive, **import** & **auto‑discover**, share with teammates
 
-<img width="1312" height="1486" alt="Security" src="https://github.com/user-attachments/assets/ede64b57-7f43-4218-907f-131f5e6da974" />
+---
 
+## At a glance
 
+- **Create a site** and it's online instantly — FrontPress Studio's latest release + a PHP runtime are downloaded automatically.
+- **Preview** opens the public site; **Login** drops you straight into `/admin`, already signed in.
+- **Duplicate / Back up / Restore** each site from its `⋯` menu.
+- **Settings** has three tabs: **PHP Manager**, **Editor**, and **Location**.
+- Point **Location** at a Dropbox/Drive folder to keep your sites in sync across machines.
+
+Default credentials for a new site are **`fpsadmin` / `fpspass`** — change them from the site's admin.

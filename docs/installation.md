@@ -4,6 +4,10 @@ FrontPress Local is a native macOS app. (Windows support is wired up but not shi
 
 ## 1. Download
 
+<img width="3820" height="1748" alt="Screenshot 2026-06-05 at 11 48 53" src="https://github.com/user-attachments/assets/f6f4ed18-3bdc-4ded-a219-f91be17e8d40" />
+<img width="3834" height="1742" alt="Screenshot 2026-06-05 at 11 48 26" src="https://github.com/user-attachments/assets/d499ebd3-d614-48f1-ad0e-df6da2293239" />
+
+
 Open the **[Releases page](https://github.com/krstivoja/frontpress-local/releases/latest)** and download the `.dmg`:
 
 - `FrontPress.Local_<version>_universal.dmg` — a universal build that runs on both **Apple Silicon** and **Intel** Macs.

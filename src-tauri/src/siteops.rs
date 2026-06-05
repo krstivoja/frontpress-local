@@ -22,6 +22,25 @@ pub struct BackupMeta {
 }
 
 pub const META_FILE: &str = ".fp-local.json";
+/// Persistent per-site identity, kept in the install root so it travels with
+/// the folder (e.g. via Dropbox) and lets another machine discover the site.
+pub const SITE_META: &str = ".frontpress-local.json";
+
+/// Write the persistent site identity file into the install root.
+pub fn write_site_meta(install_dir: &Path, meta: &BackupMeta) -> Result<()> {
+    std::fs::write(
+        install_dir.join(SITE_META),
+        serde_json::to_string_pretty(meta)?,
+    )?;
+    Ok(())
+}
+
+/// Read the persistent site identity file (leaves it in place).
+pub fn read_site_meta(install_dir: &Path) -> Option<BackupMeta> {
+    std::fs::read_to_string(install_dir.join(SITE_META))
+        .ok()
+        .and_then(|s| serde_json::from_str::<BackupMeta>(&s).ok())
+}
 
 /// Recursively copy `src` into `dst`, skipping symlinks (FrontPress recreates
 /// the `assets` symlink itself on first request).

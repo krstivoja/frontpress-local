@@ -88,6 +88,11 @@ pub fn run() {
                 let v = app.package_info().version.to_string();
                 let _ = std::fs::write(dir.join("last-run-version.txt"), v);
             }
+            // Discover any sites already in the configured folder (e.g. a
+            // Dropbox folder synced from another machine).
+            if let Some(state) = app.try_state::<AppState>() {
+                let _ = commands::discover_sites(state.inner());
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -100,6 +105,7 @@ pub fn run() {
             commands::stop_site,
             commands::stop_all_sites,
             commands::duplicate_site,
+            commands::import_site,
             commands::backup_site,
             commands::restore_into_site,
             commands::delete_site,
@@ -110,6 +116,7 @@ pub fn run() {
             commands::list_editors,
             commands::set_editor,
             commands::set_sites_dir,
+            commands::rescan_sites,
             commands::get_settings,
             commands::selftest_update,
         ])

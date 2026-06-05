@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
+import { open, message } from "@tauri-apps/plugin-dialog";
 import { api, AppStatus } from "./api";
 import { SiteList } from "./components/SiteList";
 import { CreateSiteModal } from "./components/CreateSiteModal";
@@ -75,6 +76,25 @@ function App() {
           </button>
           <button className="btn ghost" onClick={() => setSettingsOpen(true)}>
             Settings
+          </button>
+          <button
+            className="btn ghost"
+            onClick={async () => {
+              const dir = await open({
+                directory: true,
+                multiple: false,
+                title: "Choose a FrontPress site folder",
+              });
+              if (typeof dir !== "string") return;
+              try {
+                await api.importSite(dir);
+                refresh();
+              } catch (e) {
+                await message(String(e), { title: "Import", kind: "warning" });
+              }
+            }}
+          >
+            Import
           </button>
           <button className="btn primary" onClick={() => setCreating(true)}>
             + New site

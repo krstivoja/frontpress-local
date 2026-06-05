@@ -55,6 +55,7 @@ export const api = {
     invoke<void>("delete_site", { id, deleteFiles }),
   duplicateSite: (id: string, name: string) =>
     invoke<SiteView>("duplicate_site", { id, name }),
+  importSite: (folder: string) => invoke<SiteView>("import_site", { folder }),
   backupSite: (id: string, dest: string) =>
     invoke<void>("backup_site", { id, dest }),
   restoreIntoSite: (id: string, zipPath: string) =>
@@ -66,6 +67,7 @@ export const api = {
   listEditors: () => invoke<string[]>("list_editors"),
   setEditor: (editor: string) => invoke<void>("set_editor", { editor }),
   setSitesDir: (newDir: string) => invoke<AppStatus>("set_sites_dir", { newDir }),
+  rescanSites: () => invoke<AppStatus>("rescan_sites"),
   selftestUpdate: () => invoke<boolean>("selftest_update"),
 };
 

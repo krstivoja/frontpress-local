@@ -40,6 +40,102 @@ fn resolve_sites_parent(sites_dir: &str) -> CmdResult<PathBuf> {
     }
 }
 
+/// Write the persistent identity file for a site (best-effort) so another
+/// machine can discover it when the folder is synced.
+fn write_site_identity(site: &Site) {
+    let _ = siteops::write_site_meta(
+        &PathBuf::from(&site.path),
+        &siteops::BackupMeta {
+            name: site.name.clone(),
+            php_version: site.php_version.clone(),
+            frontpress_version: site.frontpress_version.clone(),
+            admin_user: site.admin_user.clone(),
+        },
+    );
+}
+
+/// Scan the configured sites folder and register any FrontPress site that
+/// isn't already in the list — this is what makes a synced (Dropbox/Drive)
+/// folder show up on another machine. Returns how many were added.
+pub(crate) fn discover_sites(app_state: &AppState) -> CmdResult<usize> {
+    let dir = {
+        let store = app_state.store.lock().map_err(err)?;
+        resolve_sites_parent(&store.settings.sites_dir)?
+    };
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(0),
+    };
+    let mut store = app_state.store.lock().map_err(err)?;
+    let known: std::collections::HashSet<String> =
+        store.sites.iter().map(|s| s.path.clone()).collect();
+    let mut added = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let dname = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if dname.starts_with('.') {
+            continue;
+        }
+        // A FrontPress install has router.php at its root.
+        if !path.join("router.php").is_file() {
+            continue;
+        }
+        let path_str = path.to_string_lossy().to_string();
+        if known.contains(&path_str) {
+            continue;
+        }
+        let slug = util::slugify(&dname);
+        if !store.slug_available(&slug) {
+            continue;
+        }
+        let meta = siteops::read_site_meta(&path).unwrap_or_default();
+        let php_version = if !meta.php_version.is_empty() {
+            meta.php_version.clone()
+        } else {
+            store.settings.global_php_version.clone()
+        };
+        let _ = frontpress::write_login_helper(&path);
+        let site = Site {
+            id: util::random_id(),
+            name: if meta.name.is_empty() { dname } else { meta.name },
+            slug,
+            path: path_str,
+            port: store.next_free_port(),
+            php_version,
+            frontpress_version: if meta.frontpress_version.is_empty() {
+                "?".to_string()
+            } else {
+                meta.frontpress_version
+            },
+            admin_user: if meta.admin_user.is_empty() {
+                crate::store::DEFAULT_ADMIN_USER.to_string()
+            } else {
+                meta.admin_user
+            },
+            created_at: now_secs(),
+        };
+        store.sites.push(site);
+        added += 1;
+    }
+    if added > 0 {
+        store.save().map_err(err)?;
+    }
+    Ok(added)
+}
+
+/// Re-scan the sites folder for new (e.g. synced) sites. Returns fresh status.
+#[tauri::command]
+pub fn rescan_sites(state: State<'_, AppState>) -> CmdResult<AppStatus> {
+    discover_sites(state.inner())?;
+    app_status_inner(&state)
+}
+
 // ── DTOs ────────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -240,6 +336,10 @@ pub async fn set_sites_dir(
     for (_id, old, _new) in &moves {
         let _ = std::fs::remove_dir_all(old);
     }
+
+    // Pick up any sites already present in the new folder (e.g. a synced
+    // Dropbox folder another machine populated).
+    let _ = discover_sites(state.inner());
 
     emit_progress(&app, "done", "Sites moved", 100, Some(100));
     app_status_inner(&state)
@@ -511,6 +611,7 @@ pub async fn create_site(
         admin_user,
         created_at: now_secs(),
     };
+    write_site_identity(&site);
     {
         let mut store = state.store.lock().map_err(err)?;
         // If global PHP was unset, adopt what we just resolved.
@@ -621,6 +722,7 @@ pub async fn duplicate_site(
         admin_user,
         created_at: now_secs(),
     };
+    write_site_identity(&site);
     {
         let mut store = state.store.lock().map_err(err)?;
         store.sites.push(site.clone());
@@ -629,6 +731,80 @@ pub async fn duplicate_site(
     emit_progress(&app, "config", "Starting site…", 0, None);
     let _ = start_internal(&state, &site);
     emit_progress(&app, "done", "Site ready", 100, Some(100));
+    Ok(view_of(&site, &state.servers))
+}
+
+/// Import an existing FrontPress site folder (e.g. one synced via Dropbox)
+/// in place — registers it without moving it, then starts it.
+#[tauri::command]
+pub async fn import_site(
+    state: State<'_, AppState>,
+    folder: String,
+) -> CmdResult<SiteView> {
+    let path = PathBuf::from(folder.trim());
+    if folder.trim().is_empty() {
+        return Err("Please choose a folder.".into());
+    }
+    if !path.join("router.php").is_file() {
+        return Err("That folder isn't a FrontPress site (no router.php).".into());
+    }
+    let path_str = path.to_string_lossy().to_string();
+    let dname = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("site")
+        .to_string();
+
+    let site = {
+        let mut store = state.store.lock().map_err(err)?;
+        if store.sites.iter().any(|s| s.path == path_str) {
+            return Err("That folder is already added.".into());
+        }
+        let base = util::slugify(&dname);
+        let mut slug = base.clone();
+        let mut n = 2;
+        while !store.slug_available(&slug) {
+            slug = format!("{base}-{n}");
+            n += 1;
+        }
+        let meta = siteops::read_site_meta(&path).unwrap_or_default();
+        let php_version = if !meta.php_version.is_empty() {
+            meta.php_version.clone()
+        } else {
+            store.settings.global_php_version.clone()
+        };
+        let site = Site {
+            id: util::random_id(),
+            name: if meta.name.is_empty() { dname } else { meta.name },
+            slug,
+            path: path_str,
+            port: store.next_free_port(),
+            php_version,
+            frontpress_version: if meta.frontpress_version.is_empty() {
+                "?".to_string()
+            } else {
+                meta.frontpress_version
+            },
+            admin_user: if meta.admin_user.is_empty() {
+                crate::store::DEFAULT_ADMIN_USER.to_string()
+            } else {
+                meta.admin_user
+            },
+            created_at: now_secs(),
+        };
+        let _ = frontpress::write_login_helper(&path);
+        write_site_identity(&site);
+        store.sites.push(site.clone());
+        store.save().map_err(err)?;
+        site
+    };
+
+    if !site.php_version.is_empty() {
+        php::ensure_installed(&site.php_version, |_, _| {})
+            .await
+            .map_err(err)?;
+    }
+    let _ = start_internal(&state, &site);
     Ok(view_of(&site, &state.servers))
 }
 

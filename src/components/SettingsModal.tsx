@@ -168,6 +168,22 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             sync your sites across machines. Changing it moves every site.
           </small>
         )}
+        <div className="row-inline">
+          <button
+            className="btn tiny"
+            disabled={movingSites}
+            onClick={async () => {
+              const s = await api.rescanSites();
+              setSiteCount(s.sites.length);
+            }}
+          >
+            Scan folder for sites
+          </button>
+          <small className="muted">
+            Imports any FrontPress sites found in this folder (e.g. synced from
+            another machine).
+          </small>
+        </div>
       </div>
 
       {/* ── Editor ─────────────────────────────────────── */}

@@ -29,6 +29,17 @@ fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
+/// Resolve the configured sites parent folder (or the default), creating it.
+fn resolve_sites_parent(sites_dir: &str) -> CmdResult<PathBuf> {
+    if sites_dir.trim().is_empty() {
+        paths::default_sites_parent().map_err(err)
+    } else {
+        let p = PathBuf::from(sites_dir.trim());
+        std::fs::create_dir_all(&p).map_err(err)?;
+        Ok(p)
+    }
+}
+
 // ── DTOs ────────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -70,6 +81,7 @@ pub struct AppStatus {
     pub arch: String,
     pub installed_php: Vec<String>,
     pub editor: String,
+    pub sites_dir: String,
 }
 
 #[derive(Serialize)]
@@ -128,6 +140,10 @@ fn emit_progress(app: &AppHandle, phase: &str, message: &str, done: u64, total: 
 
 #[tauri::command]
 pub fn app_status(state: State<'_, AppState>) -> CmdResult<AppStatus> {
+    app_status_inner(&state)
+}
+
+fn app_status_inner(state: &State<'_, AppState>) -> CmdResult<AppStatus> {
     let store = state.store.lock().map_err(err)?;
     let sites = store
         .sites
@@ -141,7 +157,99 @@ pub fn app_status(state: State<'_, AppState>) -> CmdResult<AppStatus> {
         arch: php::ARCH.to_string(),
         installed_php: php::installed_versions().unwrap_or_default(),
         editor: store.settings.editor.clone(),
+        sites_dir: resolve_sites_parent(&store.settings.sites_dir)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| store.settings.sites_dir.clone()),
     })
+}
+
+/// Change the global sites folder and **move** every site there. New location
+/// can be a Drive/Dropbox folder. Safe: copies all sites first, then switches
+/// paths and removes the originals; on any failure nothing is changed.
+#[tauri::command]
+pub async fn set_sites_dir(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    new_dir: String,
+) -> CmdResult<AppStatus> {
+    let new_parent = PathBuf::from(new_dir.trim());
+    if new_dir.trim().is_empty() {
+        return Err("Please choose a folder.".into());
+    }
+    std::fs::create_dir_all(&new_parent).map_err(err)?;
+
+    // Snapshot current state.
+    let (current_parent, sites) = {
+        let store = state.store.lock().map_err(err)?;
+        let cur = resolve_sites_parent(&store.settings.sites_dir)?;
+        (cur, store.sites.clone())
+    };
+    if new_parent == current_parent {
+        return app_status_inner(&state);
+    }
+
+    // Stop everything (paths are about to change).
+    state.servers.stop_all();
+
+    // Phase 1: copy each site to the new folder. Collect (id, old, new).
+    let mut moves: Vec<(String, PathBuf, PathBuf)> = Vec::new();
+    for (i, site) in sites.iter().enumerate() {
+        let old = PathBuf::from(&site.path);
+        let dst = new_parent.join(&site.slug);
+        emit_progress(
+            &app,
+            "config",
+            &format!("Moving {} ({}/{})", site.name, i + 1, sites.len()),
+            0,
+            None,
+        );
+        if !old.exists() {
+            continue; // nothing on disk to move
+        }
+        if dst.exists() {
+            cleanup_partial(&moves);
+            return Err(format!(
+                "“{}” already exists in the new folder — move it aside first.",
+                site.slug
+            ));
+        }
+        let o = old.clone();
+        let d = dst.clone();
+        if let Err(e) = tokio::task::spawn_blocking(move || siteops::copy_dir_all(&o, &d))
+            .await
+            .map_err(err)?
+        {
+            let _ = std::fs::remove_dir_all(&dst);
+            cleanup_partial(&moves);
+            return Err(err(e));
+        }
+        moves.push((site.id.clone(), old, dst));
+    }
+
+    // Phase 2: commit — update paths, set the new folder, remove originals.
+    {
+        let mut store = state.store.lock().map_err(err)?;
+        for (id, _old, new) in &moves {
+            if let Some(s) = store.sites.iter_mut().find(|s| &s.id == id) {
+                s.path = new.to_string_lossy().to_string();
+            }
+        }
+        store.settings.sites_dir = new_parent.to_string_lossy().to_string();
+        store.save().map_err(err)?;
+    }
+    for (_id, old, _new) in &moves {
+        let _ = std::fs::remove_dir_all(old);
+    }
+
+    emit_progress(&app, "done", "Sites moved", 100, Some(100));
+    app_status_inner(&state)
+}
+
+/// Remove copies created so far during a failed relocate (rollback helper).
+fn cleanup_partial(moves: &[(String, PathBuf, PathBuf)]) {
+    for (_id, _old, new) in moves {
+        let _ = std::fs::remove_dir_all(new);
+    }
 }
 
 /// Editors detected on this machine (the favorite-editor picker offers these).
@@ -301,7 +409,7 @@ pub async fn create_site(
     let slug = util::slugify(&name);
 
     // Snapshot what we need without holding the lock across awaits.
-    let (port, min_php, global_php) = {
+    let (port, min_php, global_php, sites_dir) = {
         let store = state.store.lock().map_err(err)?;
         if !store.slug_available(&slug) {
             return Err(format!("A site named “{slug}” already exists."));
@@ -310,6 +418,7 @@ pub async fn create_site(
             store.next_free_port(),
             store.settings.min_php.clone(),
             store.settings.global_php_version.clone(),
+            store.settings.sites_dir.clone(),
         )
     };
 
@@ -355,7 +464,7 @@ pub async fn create_site(
     .map_err(err)?;
 
     // 2. Site directory.
-    let site_dir = paths::default_sites_parent().map_err(err)?.join(&slug);
+    let site_dir = resolve_sites_parent(&sites_dir)?.join(&slug);
     if site_dir.exists() {
         return Err(format!("Directory already exists: {}", site_dir.display()));
     }
@@ -464,16 +573,16 @@ pub async fn duplicate_site(
         let store = state.store.lock().map_err(err)?;
         store.site(&id).cloned().ok_or("Unknown site")?
     };
-    let port = {
+    let (port, sites_dir) = {
         let store = state.store.lock().map_err(err)?;
         if !store.slug_available(&slug) {
             return Err(format!("A site named “{slug}” already exists."));
         }
-        store.next_free_port()
+        (store.next_free_port(), store.settings.sites_dir.clone())
     };
 
     let src_dir = PathBuf::from(&src.path);
-    let dst_dir = paths::default_sites_parent().map_err(err)?.join(&slug);
+    let dst_dir = resolve_sites_parent(&sites_dir)?.join(&slug);
     if dst_dir.exists() {
         return Err(format!("Directory already exists: {}", dst_dir.display()));
     }
@@ -583,8 +692,12 @@ pub async fn restore_into_site(
         return Err("Please drop a .zip backup file.".into());
     }
 
-    // Unpack the backup to a temp dir and sanity-check it first.
-    let parent = paths::default_sites_parent().map_err(err)?;
+    // Unpack the backup to a temp dir that's a sibling of the actual site
+    // (same filesystem, so the swap below is an atomic rename).
+    let parent = PathBuf::from(&site.path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .ok_or("Bad site path")?;
     let tmp_dir = parent.join(format!(".restore-{}", util::random_id()));
     let zp2 = zp.clone();
     let tmp2 = tmp_dir.clone();

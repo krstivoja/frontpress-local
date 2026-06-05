@@ -49,6 +49,11 @@ pub struct Settings {
     /// the editor command. Empty = none chosen.
     #[serde(default)]
     pub editor: String,
+    /// Folder where site directories live. Empty = the default
+    /// (`~/FrontPress Sites`). Point this at a Drive/Dropbox folder to keep
+    /// sites in sync across machines.
+    #[serde(default)]
+    pub sites_dir: String,
 }
 
 fn default_min_php() -> String {
@@ -61,6 +66,7 @@ impl Default for Settings {
             global_php_version: String::new(),
             min_php: default_min_php(),
             editor: String::new(),
+            sites_dir: String::new(),
         }
     }
 }

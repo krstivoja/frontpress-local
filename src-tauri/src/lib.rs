@@ -109,6 +109,7 @@ pub fn run() {
             commands::open_in_editor,
             commands::list_editors,
             commands::set_editor,
+            commands::set_sites_dir,
             commands::get_settings,
             commands::selftest_update,
         ])

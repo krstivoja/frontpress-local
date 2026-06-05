@@ -20,6 +20,7 @@ export interface AppStatus {
   arch: string;
   installedPhp: string[];
   editor: string;
+  sitesDir: string;
 }
 
 export interface PhpOption {
@@ -64,6 +65,7 @@ export const api = {
   openInEditor: (id: string) => invoke<void>("open_in_editor", { id }),
   listEditors: () => invoke<string[]>("list_editors"),
   setEditor: (editor: string) => invoke<void>("set_editor", { editor }),
+  setSitesDir: (newDir: string) => invoke<AppStatus>("set_sites_dir", { newDir }),
   selftestUpdate: () => invoke<boolean>("selftest_update"),
 };
 

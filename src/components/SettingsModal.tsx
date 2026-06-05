@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { open, ask } from "@tauri-apps/plugin-dialog";
 import { api, PhpCatalog, SetupProgress } from "../api";
 import { Modal } from "./Modal";
 
@@ -17,6 +18,10 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [customEditor, setCustomEditor] = useState("");
   const [picker, setPicker] = useState(""); // current <select> value
 
+  const [sitesDir, setSitesDir] = useState("");
+  const [siteCount, setSiteCount] = useState(0);
+  const [movingSites, setMovingSites] = useState(false);
+
   const load = async () => {
     try {
       const [cat, status, eds] = await Promise.all([
@@ -26,6 +31,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       ]);
       setCatalog(cat);
       setGlobalVersion(status.globalPhpVersion);
+      setSitesDir(status.sitesDir);
+      setSiteCount(status.sites.length);
       setEditors(eds);
       setEditor(status.editor);
       // If the saved editor isn't a detected one, treat it as custom.
@@ -33,6 +40,30 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       if (status.editor && !eds.includes(status.editor)) setCustomEditor(status.editor);
     } catch (e) {
       setError(String(e));
+    }
+  };
+
+  const changeSitesDir = async () => {
+    const dir = await open({ directory: true, multiple: false, title: "Choose sites folder" });
+    if (typeof dir !== "string" || dir === sitesDir) return;
+    const ok =
+      siteCount === 0 ||
+      (await ask(
+        `Move ${siteCount} site${siteCount === 1 ? "" : "s"} to:\n${dir}\n\nAll site files move there and sites stop during the move.`,
+        { title: "Change sites folder", kind: "warning" }
+      ));
+    if (!ok) return;
+    setMovingSites(true);
+    setError(null);
+    setProgress(null);
+    try {
+      const status = await api.setSitesDir(dir);
+      setSitesDir(status.sitesDir);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setMovingSites(false);
+      setProgress(null);
     }
   };
 
@@ -92,6 +123,29 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Settings" onClose={onClose}>
       {error && <div className="banner error">{error}</div>}
+
+      {/* ── Sites location ─────────────────────────────── */}
+      <div className="field">
+        <span>Sites location</span>
+        <div className="row-inline">
+          <input readOnly value={sitesDir} title={sitesDir} />
+          <button
+            className="btn tiny"
+            disabled={movingSites}
+            onClick={changeSitesDir}
+          >
+            {movingSites ? "Moving…" : "Change…"}
+          </button>
+        </div>
+        {movingSites && progress ? (
+          <small className="muted">{progress.message}</small>
+        ) : (
+          <small className="muted">
+            Where site folders live. Point this at a Drive/Dropbox folder to
+            sync your sites across machines. Changing it moves every site.
+          </small>
+        )}
+      </div>
 
       {/* ── Editor ─────────────────────────────────────── */}
       <div className="field">

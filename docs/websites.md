@@ -2,6 +2,9 @@
 
 ## Create a new site
 
+<img width="2184" height="1664" alt="Screenshot 2026-06-05 at 11 43 01" src="https://github.com/user-attachments/assets/7810d8ee-64ef-4fc0-8a16-839aac5fa149" />
+
+
 1. Click **+ New site**.
 2. Enter a **name** (the folder/slug is derived from it).
 3. Choose a **PHP version** — either the **global default** or a **per‑site** version (see [Managing PHP](php.md)).

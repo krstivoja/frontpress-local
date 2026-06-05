@@ -673,6 +673,11 @@ body {
 .row-inline input {
   flex: 1;
 }
+/* Match the button height to the input next to it. */
+.row-inline .btn {
+  height: var(--h-control);
+  flex: none;
+}
 
 .radio-row {
   display: flex;

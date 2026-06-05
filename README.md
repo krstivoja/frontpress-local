@@ -4,6 +4,9 @@ Run [FrontPress Studio](https://github.com/krstivoja/frontpress-studio) sites on
 
 Because FrontPress is a **flat‑file** CMS, a "site" is just a folder. That means sites are trivially **portable, syncable (Dropbox / Google Drive), importable, and shareable** — which the app leans into.
 
+<img width="2184" height="1664" alt="Screenshot 2026-06-05 at 11 45 19" src="https://github.com/user-attachments/assets/6ece664e-0f14-4803-b151-f26f563fa245" />
+
+
 ---
 
 ## Download

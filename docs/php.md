@@ -4,6 +4,9 @@ FrontPress Local bundles PHP **for you** — there's no Homebrew or system PHP t
 
 Open **Settings → PHP Manager** to manage runtimes.
 
+<img width="2184" height="1664" alt="Screenshot 2026-06-05 at 11 42 33" src="https://github.com/user-attachments/assets/ef50dea6-8078-479c-9d38-e5d22e2a3804" />
+
+
 ## How it works
 
 - On macOS, runtimes come from **[static‑php.dev](https://dl.static-php.dev/)** — a single `php` binary per version, with the extensions FrontPress needs already compiled in (mbstring, gd, curl, sqlite3, openssl, dom, fileinfo, zip, …).

@@ -6,6 +6,9 @@ Because FrontPress is a **flat‑file** CMS, a site is just a folder on disk —
 
 By default, sites are stored in:
 
+<img width="2184" height="1664" alt="Screenshot 2026-06-05 at 11 22 00" src="https://github.com/user-attachments/assets/f55c7b6e-1abb-4d25-b2ac-703187eb2b13" />
+
+
 ```
 ~/FrontPress Sites/<slug>/
 ```

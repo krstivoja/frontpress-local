@@ -6,6 +6,9 @@ Because FrontPress is a **flat‑file** CMS, a "site" is just a folder. That mea
 
 <img width="2184" height="1664" alt="Screenshot 2026-06-05 at 11 45 19" src="https://github.com/user-attachments/assets/6ece664e-0f14-4803-b151-f26f563fa245" />
 
+### Watch video to see FrontPress Local in action
+
+[![Watch the video](https://img.youtube.com/vi/zPbcGmOjzIA/maxresdefault.jpg)](https://youtu.be/zPbcGmOjzIA)
 
 ---
 
